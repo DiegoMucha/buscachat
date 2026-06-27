@@ -5,6 +5,8 @@ APP_DIR="${APP_DIR:-$HOME/buscachat-venezuela}"
 BRANCH="${BRANCH:-main}"
 SERVICE_NAME="${SERVICE_NAME:-buscachat-python}"
 
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
 retry() {
   local attempts="$1"
   local delay="$2"
@@ -28,14 +30,20 @@ retry() {
   done
 }
 
+UV_BIN="$(command -v uv || true)"
+if [[ -z "$UV_BIN" ]]; then
+  echo "uv was not found in PATH: $PATH" >&2
+  exit 1
+fi
+
 cd "$APP_DIR"
 retry 5 5 git fetch origin "$BRANCH"
 git checkout "$BRANCH"
 git merge --ff-only FETCH_HEAD
 
 cd "$APP_DIR/buscachat-python"
-retry 5 5 uv sync --frozen --no-dev
-uv run alembic upgrade head
+retry 5 5 "$UV_BIN" sync --frozen --no-dev
+"$UV_BIN" run alembic upgrade head
 
 sudo /usr/bin/systemctl restart "$SERVICE_NAME"
 sudo /usr/bin/systemctl is-active --quiet "$SERVICE_NAME"
