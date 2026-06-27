@@ -178,5 +178,75 @@ uv run pytest -m e2e
 ```
 
 La prueba e2e inicia un contenedor Postgres con testcontainers, ejecuta todas
-las migraciones SQL, corre el sync a traves de la capa adapter/service, y
+las migraciones Alembic, corre el sync a traves de la capa adapter/service, y
 verifica upserts en `missing_people`, `source_records` y `sync_state`.
+
+## Produccion local
+
+El smoke de produccion usa dependencias sin dev, aplica migraciones y arranca
+FastAPI sin reload:
+
+```bash
+HOST=127.0.0.1 PORT=8000 ./scripts/prod-smoke.sh
+```
+
+## Ejecutar en produccion
+
+Preparar el directorio de la app:
+
+```bash
+export APP_DIR=/home/lozabot/buscachat-venezuela
+git clone git@github.com:DiegoMucha/buscachat.git "$APP_DIR"
+cd "$APP_DIR/buscachat-python"
+uv sync --frozen --no-dev
+```
+
+Crear el archivo de entorno:
+
+```bash
+cp deploy/production.env.sample .env.production
+nano .env.production
+```
+
+Valores minimos a revisar en `.env.production`:
+
+```env
+DATABASE_URL=postgresql+psycopg://...
+PRIVATE_API_TOKEN=...
+FACE_MATCHER=stub
+NOTIFIER=null
+```
+
+Instalar y arrancar systemd:
+
+```bash
+sudo cp deploy/buscachat-python.service /etc/systemd/system/buscachat-python.service
+sudo systemctl daemon-reload
+uv run alembic upgrade head
+sudo systemctl enable --now buscachat-python
+sudo systemctl status buscachat-python
+```
+
+Permitir que GitHub Actions reinicie solo este servicio:
+
+```bash
+sudo tee /etc/sudoers.d/buscachat-python >/dev/null <<'EOF'
+lozabot ALL=(root) NOPASSWD: /usr/bin/systemctl restart buscachat-python, /usr/bin/systemctl is-active buscachat-python
+EOF
+sudo chmod 0440 /etc/sudoers.d/buscachat-python
+sudo visudo -cf /etc/sudoers.d/buscachat-python
+```
+
+Probar el deploy manual en el servidor:
+
+```bash
+APP_DIR=/home/lozabot/buscachat-venezuela \
+BRANCH=main \
+SERVICE_NAME=buscachat-python \
+./scripts/prod-deploy-server.sh
+```
+
+GitHub Actions despliega en cada push a `main` que toque `buscachat-python/**`.
+El secret requerido es `SERVER_SSH_DEPLOY_KEY`, con la llave privada que conecta
+como `lozabot@ssh.sumak.space`. El clone del servidor debe poder hacer
+`git pull --ff-only origin main`.
