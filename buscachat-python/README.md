@@ -230,27 +230,3 @@ uv run alembic upgrade head
 sudo systemctl enable --now buscachat-python
 sudo systemctl status buscachat-python
 ```
-
-Permitir que GitHub Actions reinicie solo este servicio:
-
-```bash
-sudo tee /etc/sudoers.d/buscachat-python >/dev/null <<'EOF'
-lozabot ALL=(root) NOPASSWD: /usr/bin/systemctl restart buscachat-python, /usr/bin/systemctl is-active buscachat-python
-EOF
-sudo chmod 0440 /etc/sudoers.d/buscachat-python
-sudo visudo -cf /etc/sudoers.d/buscachat-python
-```
-
-Probar el deploy manual en el servidor:
-
-```bash
-APP_DIR=/home/lozabot/buscachat-venezuela \
-BRANCH=main \
-SERVICE_NAME=buscachat-python \
-./scripts/prod-deploy-server.sh
-```
-
-GitHub Actions despliega en cada push a `main` que toque `buscachat-python/**`.
-El secret requerido es `SERVER_SSH_DEPLOY_KEY`, con la llave privada que conecta
-como `lozabot@ssh.sumak.space`. El clone del servidor debe poder hacer
-`git pull --ff-only origin main`.
