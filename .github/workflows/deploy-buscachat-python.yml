@@ -43,4 +43,40 @@ jobs:
             -o ServerAliveInterval=30 \
             -o ProxyCommand="cloudflared access ssh --hostname %h" \
             lozabot@ssh.sumak.space \
-            'APP_DIR=/home/lozabot/buscachat-venezuela BRANCH=main SERVICE_NAME=buscachat-python /home/lozabot/buscachat-venezuela/buscachat-python/scripts/prod-deploy-server.sh'
+            'bash -se' <<'REMOTE_DEPLOY'
+          set -euo pipefail
+
+          APP_DIR=/home/lozabot/buscachat-venezuela
+          BRANCH=main
+          SERVICE_NAME=buscachat-python
+
+          retry() {
+            local attempts="$1"
+            local delay="$2"
+            shift 2
+
+            local attempt=1
+            while true; do
+              if "$@"; then
+                return 0
+              fi
+
+              if (( attempt >= attempts )); then
+                echo "Command failed after $attempt attempts: $*" >&2
+                return 1
+              fi
+
+              echo "Command failed, retrying in ${delay}s ($attempt/$attempts): $*" >&2
+              sleep "$delay"
+              attempt=$((attempt + 1))
+              delay=$((delay * 2))
+            done
+          }
+
+          cd "$APP_DIR"
+          retry 5 5 git fetch origin "$BRANCH"
+          git checkout "$BRANCH"
+          git merge --ff-only FETCH_HEAD
+
+          APP_DIR="$APP_DIR" SERVICE_NAME="$SERVICE_NAME" ./buscachat-python/scripts/prod-deploy-server.sh
+          REMOTE_DEPLOY

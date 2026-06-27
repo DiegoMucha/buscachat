@@ -2,7 +2,6 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-$HOME/buscachat-venezuela}"
-BRANCH="${BRANCH:-main}"
 SERVICE_NAME="${SERVICE_NAME:-buscachat-python}"
 
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
@@ -35,11 +34,6 @@ if [[ -z "$UV_BIN" ]]; then
   echo "uv was not found in PATH: $PATH" >&2
   exit 1
 fi
-
-cd "$APP_DIR"
-retry 5 5 git fetch origin "$BRANCH"
-git checkout "$BRANCH"
-git merge --ff-only FETCH_HEAD
 
 cd "$APP_DIR/buscachat-python"
 retry 5 5 "$UV_BIN" sync --frozen --no-dev
