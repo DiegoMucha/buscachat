@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- SEO Meta Tags -->
+  <title>BuscaChat | Búsqueda de Personas Desaparecidas</title>
+  <meta name="description" content="Iniciativa humanitaria y sin fines de lucro que conecta tecnología de reconocimiento facial, WhatsApp y Telegram para ayudar a encontrar personas desaparecidas en El Salvador, Venezuela, Colombia y México.">
+  <meta name="keywords" content="buscar personas desaparecidas, chatbot reconocimiento facial, ayuda humanitaria, encontrar familiares, rescatistas, El Salvador, Venezuela, Colombia, México, sin fines de lucro">
+  <meta name="author" content="Iniciativa BuscaChat">
+  
+  <!-- OpenGraph Metadata (Social Share) -->
+  <meta property="og:title" content="BuscaChat | Búsqueda de Personas Desaparecidas">
+  <meta property="og:description" content="Iniciativa tecnológica y gratuita para conectar familias mediante reconocimiento facial desde WhatsApp y Telegram.">
+  <meta property="og:image" content="assets/reencuentro_ilustracion.png">
+  <meta property="og:type" content="website">
+  
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%2306b6d4%22><path d=%22M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z%22/></svg>">
+</head>
+<body>
+
+  <!-- Ambient Light Halos -->
+  <div class="ambient-glow glow-top-left"></div>
+  <div class="ambient-glow glow-mid-right"></div>
+  <div class="ambient-glow glow-bottom-left"></div>
+
+  <!-- ==========================================================================
+       HEADER / NAVIGATION
+       ========================================================================== */ -->
+  <header>
+    <div class="container nav-container">
+      <a href="#" id="nav-logo" class="logo">
+        <!-- Heart with magnifying glass SVG Isotype with premium color gradient -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="url(#logo-gradient)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <defs>
+            <linearGradient id="logo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#22d3ee" />
+              <stop offset="100%" stop-color="#3b82f6" />
+            </linearGradient>
+          </defs>
+          <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+          <circle cx="12" cy="9.5" r="2.5" />
+        </svg>
+        <span>BuscaChat</span>
+      </a>
+      <div id="badge-gratis" class="badge-info">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        <span>Sin Fines de Lucro</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ==========================================================================
+         STEPS SECTION (FIRST THING SEEN - TOP FOLD)
+         ========================================================================== */ -->
+    <section id="how-it-works" class="steps-section">
+      <div class="container">
+        <div class="section-header reveal active">
+          <span class="section-label">Paso a Paso</span>
+          <h1 id="main-title" class="text-gradient">Unidos para reencontrarnos: Tecnología al servicio de la búsqueda</h1>
+          <p id="main-subtitle">
+            Usa nuestro asistente de inteligencia artificial por mensajería. Una iniciativa sin fines de lucro para comenzar la búsqueda o reporte en solo 3 simples pasos de forma gratuita:
+          </p>
+          
+          <!-- Primary WhatsApp & Telegram CTAs on first fold -->
+          <div class="top-cta-group">
+            <a href="#" id="hero-whatsapp-btn" class="btn btn-whatsapp pulse-animation" target="_blank" rel="noopener noreferrer">
+              <!-- WhatsApp SVG -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.458L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.37 9.864-9.799.002-2.63-1.023-5.101-2.885-6.97C16.388 1.95 13.916 1.916 12 1.917c-5.436 0-9.86 4.37-9.864 9.8 0 1.77.476 3.498 1.38 5.048L2.5 21.5l4.147-1.346zM17.15 14.77c-.285-.143-1.687-.83-1.95-.925-.263-.096-.454-.143-.645.143-.191.286-.74.926-.907 1.117-.167.19-.334.214-.62.072-1.305-.653-2.185-1.154-3.047-2.63-.228-.39.228-.363.652-1.206.071-.143.036-.268-.018-.376s-.645-1.55-.884-2.12c-.233-.56-.469-.482-.645-.491-.167-.008-.358-.01-.55-.01s-.501.072-.764.358c-.263.286-1.004.978-1.004 2.385 0 1.408 1.027 2.77 1.171 2.96 1.436 1.933 3.013 2.87 4.826 3.58.528.207.954.27 1.314.21.402-.066 1.23-.503 1.403-.989.172-.486.172-.903.12-.99-.052-.087-.191-.134-.477-.277z"/>
+              </svg>
+              Iniciar en WhatsApp
+            </a>
+            <a href="#" id="hero-telegram-btn" class="btn btn-telegram" target="_blank" rel="noopener noreferrer">
+              <!-- Telegram SVG -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12.014.01C5.398.01.06 5.348.06 11.96c0 6.611 5.338 11.95 11.954 11.95 6.616 0 11.954-5.339 11.954-11.95C23.968 5.347 18.63.01 12.014.01zm5.556 8.163c-.173 1.831-.926 6.309-1.309 8.358-.162.867-.482 1.158-.79 1.187-.678.062-1.192-.449-1.849-.881-1.028-.676-1.61-1.093-2.608-1.751-1.154-.761-.406-1.18.252-1.865.172-.179 3.167-2.906 3.225-3.155.007-.03.013-.146-.056-.208-.07-.061-.173-.04-.247-.023-.105.024-1.782 1.134-5.045 3.336-.479.329-.913.49-1.302.481-.429-.01-1.254-.233-1.868-.432-.752-.244-1.35-.373-1.298-.788.027-.216.326-.437.896-.662 3.513-1.53 5.856-2.54 7.027-3.03 3.348-1.397.404-.243.834-.243.43 0 .822.096.953.535.042.14.062.339.052.542z"/>
+              </svg>
+              Iniciar en Telegram
+            </a>
+          </div>
+        </div>
+        
+        <div class="steps-grid">
+          <!-- Step 1 -->
+          <div id="step-card-1" class="step-card reveal">
+            <div class="step-number">01</div>
+            <h3 class="step-title">Inicia el chat</h3>
+            <p class="step-desc">
+              Elige abrir el asistente inteligente en WhatsApp o Telegram con un simple toque. Envía un mensaje inicial de saludo.
+            </p>
+          </div>
+          
+          <!-- Step 2 -->
+          <div id="step-card-2" class="step-card reveal">
+            <div class="step-number">02</div>
+            <h3 class="step-title">Sube la foto</h3>
+            <p class="step-desc">
+              Comparte una foto clara del rostro de la persona que estás buscando o del hallazgo que deseas registrar.
+            </p>
+          </div>
+          
+          <!-- Step 3 -->
+          <div id="step-card-3" class="step-card reveal">
+            <div class="step-number">03</div>
+            <h3 class="step-title">Recibe respuesta</h3>
+            <p class="step-desc">
+              Nuestros servidores analizarán los rasgos faciales y te notificarán al instante si hay coincidencias en la base de datos de rescate.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         HERO / DETALLE SECTION (SECONDARY VISUAL EXPLANATION)
+         ========================================================================== */ -->
+    <section id="hero-section" class="hero section-padding">
+      <div class="container hero-grid">
+        <div class="hero-content reveal">
+          <h2 class="text-gradient">Tecnología de Reconocimiento Facial para Casos Humanitarios</h2>
+          <p class="hero-subtitle">
+            Nuestro sistema procesa de forma segura imágenes de personas reportadas en albergues, hospitales y zonas de rescate. 
+          </p>
+          <p>
+            Al comparar rasgos biométricos únicos, podemos rastrear identidades a pesar del paso del tiempo o cambios de apariencia, proporcionando un canal de comunicación inmediato entre familiares y rescatistas.
+          </p>
+        </div>
+        <div class="hero-visual reveal">
+          <div id="hero-illustration" class="hero-image-wrapper">
+            <img src="assets/reencuentro_ilustracion.png" alt="Ilustración de esperanza y reencuentro familiar" class="hero-image">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==========================================================================
+         USER SEGMENTS (SPLIT SECTION)
+         ========================================================================== */ -->
+    <section id="user-segments" class="section-padding">
+      <div class="container">
+        <div class="section-header reveal">
+          <span class="section-label">Canales de Acción</span>
+          <h2>Elige tu perfil de atención</h2>
+          <p>Nuestra plataforma conecta solicitudes de búsqueda con reportes de hallazgo para acelerar la localización de personas.</p>
+        </div>
+        
+        <div class="segments-grid">
+          <!-- Segment: Family -->
+          <div id="segment-family-card" class="segment-card segment-card-family reveal">
+            <div class="segment-icon">
+              <!-- Family Icon SVG -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="url(#family-gradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <defs>
+                  <linearGradient id="family-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#60a5fa" />
+                    <stop offset="100%" stop-color="#3b82f6" />
+                  </linearGradient>
+                </defs>
+                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            </div>
+            <h3 class="segment-title">¿Buscas a un familiar?</h3>
+            <p class="segment-desc">
+              Si tienes un ser querido desaparecido, te guiaremos paso a paso para cargar sus datos y buscar coincidencias faciales en nuestra red de rescatistas y centros médicos.
+            </p>
+            <div class="segment-actions">
+              <a href="#" id="family-whatsapp-btn" class="btn btn-whatsapp" target="_blank" rel="noopener noreferrer">
+                WhatsApp
+              </a>
+              <a href="#" id="family-telegram-btn" class="btn btn-telegram" target="_blank" rel="noopener noreferrer">
+                Telegram
+              </a>
+            </div>
+          </div>
+          
+          <!-- Segment: Rescuers -->
+          <div id="segment-rescue-card" class="segment-card segment-card-rescue reveal">
+            <div class="segment-icon">
+              <!-- Rescuer / Volunteer Icon SVG -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="url(#rescue-gradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <defs>
+                  <linearGradient id="rescue-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#22d3ee" />
+                    <stop offset="100%" stop-color="#0d9488" />
+                  </linearGradient>
+                </defs>
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="M12 8v8"/>
+                <path d="M8 12h8"/>
+              </svg>
+            </div>
+            <h3 class="segment-title">¿Eres rescatista o voluntario?</h3>
+            <p class="segment-desc">
+              Si localizaste a una persona desorientada o en estado de vulnerabilidad, registra su fotografía de forma segura para ayudar a que su familia la localice de inmediato.
+            </p>
+            <div class="segment-actions">
+              <a href="#" id="rescue-whatsapp-btn" class="btn btn-whatsapp" target="_blank" rel="noopener noreferrer">
+                WhatsApp
+              </a>
+              <a href="#" id="rescue-telegram-btn" class="btn btn-telegram" target="_blank" rel="noopener noreferrer">
+                Telegram
+              </a>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Privacy & Security trust banner -->
+        <div id="trust-security-banner" class="trust-banner reveal">
+          <div class="trust-icon">
+            <!-- Shield / Privacy SVG -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <div class="trust-content">
+            <h4 class="trust-title">Tratamiento Seguro y Confidencial de Datos</h4>
+            <p class="trust-desc">
+              La protección y privacidad de tu información es de suma importancia para nosotros. Como iniciativa 100% humanitaria y sin fines de lucro, garantizamos que tus datos jamás serán comercializados. Las fotografías e información ingresadas se manejan bajo protocolos de confidencialidad absoluta y son utilizadas única y exclusivamente con el fin de comparar rostros y facilitar el reencuentro de las personas.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ==========================================================================
+       FOOTER
+       ========================================================================== */ -->
+  <footer>
+    <div class="container footer-grid">
+      <div class="footer-info">
+        <a href="#" id="footer-logo" class="footer-logo">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+            <circle cx="12" cy="9.5" r="2.5" />
+          </svg>
+          <span>BuscaChat</span>
+        </a>
+        <p class="footer-tagline">Conectando voluntades y tecnología para unir a las familias. Iniciativa sin fines de lucro de carácter humanitario.</p>
+      </div>
+      
+      <div class="footer-divider"></div>
+      
+      <div class="footer-meta">
+        <p>&copy; 2026 BuscaChat. Todos los derechos reservados.</p>
+        
+        <!-- Premium CSS Country Flags -->
+        <div id="flags-badge" class="flags-badge" title="Iniciativa activa para El Salvador, Venezuela, Colombia y México">
+          <span>Hecho por</span>
+          <div class="flags-list">
+            <!-- El Salvador Flag -->
+            <div class="flag flag-sv" title="El Salvador">
+              <div class="stripe-blue"></div>
+              <div class="stripe-white"></div>
+              <div class="stripe-blue"></div>
+            </div>
+            <!-- Venezuela Flag -->
+            <div class="flag flag-ve" title="Venezuela">
+              <div class="stripe-yellow"></div>
+              <div class="stripe-blue"></div>
+              <div class="stripe-red"></div>
+            </div>
+            <!-- Colombia Flag -->
+            <div class="flag flag-co" title="Colombia">
+              <div class="stripe-yellow"></div>
+              <div class="stripe-blue"></div>
+              <div class="stripe-red"></div>
+            </div>
+            <!-- Mexico Flag -->
+            <div class="flag flag-mx" title="México">
+              <div class="col-green"></div>
+              <div class="col-white"></div>
+              <div class="col-red"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="script.js"></script>
+</body>
+</html>
