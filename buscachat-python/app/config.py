@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Buscachat Python"
     database_url: str = (
-        "postgresql+psycopg://postgres:postgres@localhost:5432/buscachat_dev"
+        "postgresql+psycopg://postgres:postgres@localhost:15432/buscachat_dev"
     )
     private_api_token: str = "dev-hackathon-token"
 

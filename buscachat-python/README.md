@@ -44,7 +44,8 @@ Documentacion interactiva:
 ## Configuracion
 
 ```env
-DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/buscachat_dev
+POSTGRES_HOST_PORT=15432
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:15432/buscachat_dev
 PRIVATE_API_TOKEN=dev-hackathon-token
 SOS_VENEZUELA_PERSONS_URL=https://sosvenezuela2026.com/api/persons/list
 MISSING_PEOPLE_SYNC_ENABLED=true
@@ -58,6 +59,9 @@ MISSING_PEOPLE_SYNC_RETRY_BACKOFF_SECONDS=1
 
 Para desarrollo local, usa `MISSING_PEOPLE_SYNC_MAX_PAGES=1` si quieres que el
 sync inicial descargue solo una pagina.
+
+Si el host ya usa ese puerto, cambia `POSTGRES_HOST_PORT` y actualiza tambien el
+puerto de `DATABASE_URL`.
 
 ## Bot intake (WhatsApp / Telegram)
 
