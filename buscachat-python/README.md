@@ -59,6 +59,40 @@ MISSING_PEOPLE_SYNC_RETRY_BACKOFF_SECONDS=1
 Para desarrollo local, usa `MISSING_PEOPLE_SYNC_MAX_PAGES=1` si quieres que el
 sync inicial descargue solo una pagina.
 
+## Bot intake (WhatsApp / Telegram)
+
+El endpoint `POST /bot/chat` recibe la salida del nodo **Motor Conversacional**
+del bot (n8n) y la ejecuta de verdad contra la base de datos. Despacha por el
+campo `accion`:
+
+- `registrar_persona`: descarga la foto (`imagen_ref`), calcula su embedding
+  facial, crea una fila en `missing_people` y un `bot_reports` enlazado con los
+  datos del bot, el contacto y el historial de conversacion.
+- `buscar_por_foto`: compara la foto contra los registros del bot. Si hay match
+  por encima de `FACE_MATCH_THRESHOLD`, marca a la persona como `found` y
+  notifica al reportante original por WhatsApp (Green API). Si no hay match, no
+  retorna datos de ninguna persona.
+- `buscar_por_nombre`: reutiliza la busqueda por nombre existente.
+
+En n8n: tras **Motor Conversacional**, agrega un **Switch** sobre
+`{{ $json.accion }}` y enchufa un HTTP Request `POST /bot/chat` enviando el item
+completo.
+
+### Reconocimiento facial
+
+Por defecto `FACE_MATCHER=stub` (sin dependencias nativas) para que `pytest` y el
+arranque sean ligeros. Para usar el motor real local instala el grupo opcional y
+cambia la variable:
+
+```bash
+uv sync --group face
+# .env
+FACE_MATCHER=insightface
+```
+
+Los embeddings se guardan en `bot_reports.face_embedding` (JSONB) y la
+comparacion se hace por similitud coseno en Python.
+
 ## Migraciones
 
 Este proyecto usa Alembic. Las migraciones viven en `alembic/versions/*.py`.

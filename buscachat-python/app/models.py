@@ -1,7 +1,17 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Column, DateTime, Index, Integer, String, UniqueConstraint, text
+from sqlalchemy import (
+    BigInteger,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -70,6 +80,79 @@ class SourceRecord(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), nullable=True),
     )
     synced_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    )
+
+
+class BotReport(SQLModel, table=True):
+    """Missing-person report collected through the conversational bot.
+
+    Holds the bot-specific data that does not fit in ``MissingPerson`` (age,
+    description, the reporter's contact, the conversation snapshot and the face
+    embedding) and links back to the ``missing_people`` row so registered people
+    stay searchable through the existing endpoints.
+    """
+
+    __tablename__ = "bot_reports"
+    __table_args__ = (
+        Index("ix_bot_reports_chat_id", "chat_id"),
+        Index("ix_bot_reports_status", "status"),
+    )
+
+    id: int | None = Field(
+        default=None,
+        sa_column=Column(BigInteger, primary_key=True, autoincrement=True),
+    )
+    missing_person_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            BigInteger,
+            ForeignKey("missing_people.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+    )
+    channel: str = Field(max_length=50)
+    chat_id: str = Field(max_length=200)
+    sender: str | None = Field(default=None, max_length=200)
+    reporter_name: str | None = Field(default=None, max_length=300)
+    contact: str | None = Field(default=None, max_length=300)
+
+    full_name: str = Field(max_length=500)
+    age: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=2000)
+    location: str | None = Field(default=None, max_length=1000)
+    photo_url: str | None = Field(default=None, max_length=2000)
+
+    face_embedding: list[float] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
+    status: str = Field(
+        default="missing",
+        sa_column=Column(String(50), nullable=False, server_default=text("'missing'")),
+    )
+    found_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    notified_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    conversation: Any | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
+    datos_raw: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
+    created_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    )
+    updated_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )

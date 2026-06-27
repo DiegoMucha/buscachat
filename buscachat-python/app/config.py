@@ -19,6 +19,21 @@ class Settings(BaseSettings):
     missing_people_sync_retry_attempts: int = 3
     missing_people_sync_retry_backoff_seconds: float = 1.0
 
+    # Bot intake (WhatsApp/Telegram) configuration
+    bot_source: str = "whatsapp_bot"
+
+    # Facial recognition
+    face_matcher: str = "insightface"  # "insightface" | "stub"
+    face_match_threshold: float = 0.35
+    face_insightface_model: str = "buffalo_l"
+
+    # WhatsApp notifications (Green API)
+    notifier: str = "green_api"  # "green_api" | "null"
+    green_api_base_url: str = "https://api.green-api.com"
+    green_api_instance_id: str = ""
+    green_api_token: str = ""
+    image_download_timeout_seconds: float = 30.0
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
