@@ -10,6 +10,7 @@ from app.config import Settings, get_settings
 from app.database import get_session, run_migrations
 from app.models import MissingPerson, SyncState
 from app.routers import bot as bot_router
+from app.routers import whatsapp_webhook as whatsapp_router
 from app.scheduler import start_scheduler
 from app.services.search import find_missing_person_by_name
 
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
 app.include_router(bot_router.router)
+app.include_router(whatsapp_router.router)
 
 
 def require_private_token(
