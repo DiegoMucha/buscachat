@@ -90,7 +90,8 @@ def test_register_and_search_by_photo(postgres_url: str, monkeypatch) -> None:
         assert no_match is None
         assert notifier.calls == []
 
-    # Search with the matching photo -> found + reporter notified.
+    # Search with the matching photo -> returns a match + reporter notified.
+    # The person is only marked found by the explicit confirmation action.
     with Session(engine) as session:
         match = bot_intake.search_by_photo(
             session,
@@ -101,13 +102,17 @@ def test_register_and_search_by_photo(postgres_url: str, monkeypatch) -> None:
             imagen_ref="https://example.test/maria.jpg",
         )
         assert match is not None
-        assert match.status == "found"
-        assert match.found_at is not None
+        assert match.status == "missing"
+        assert match.found_at is None
         assert match.notified_at is not None
 
         person = session.get(MissingPerson, match.missing_person_id)
         assert person is not None
-        assert person.status == "found"
+        assert person.status == "missing"
+
+        marked = bot_intake.mark_missing_person_found(session, person.id)
+        assert marked is not None
+        assert marked.status == "found"
 
     assert len(notifier.calls) == 1
     chat_id, message = notifier.calls[0]

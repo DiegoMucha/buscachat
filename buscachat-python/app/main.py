@@ -2,15 +2,17 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from sqlalchemy import text
 from sqlmodel import Session, select
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.database import get_session, run_migrations
 from app.models import MissingPerson, SyncState
 from app.routers import bot as bot_router
-from app.routers import webhook as webhook_router
+from app.routers import whatsapp_evolution_api_webhook as evolution_api_webhook_router
+from app.routers import whatsapp_green_api_webhook as green_api_webhook_router
+from app.routers import whatsapp_meta_webhook as meta_webhook_router
 from app.scheduler import start_scheduler
 from app.security import require_private_token
 from app.services.search import find_missing_person_by_name
@@ -31,11 +33,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
 app.include_router(bot_router.router)
-app.include_router(webhook_router.router)
+app.include_router(evolution_api_webhook_router.router)
+app.include_router(green_api_webhook_router.router)
+app.include_router(meta_webhook_router.router)
 
 
 @app.get("/health/db")
-def database_health(session: Annotated[Session, Depends(get_session)]) -> dict[str, str]:
+def database_health(
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, str]:
     session.exec(text("SELECT 1"))
     return {"status": "ok"}
 
@@ -63,7 +69,9 @@ def list_missing_people(
         statement = statement.where(MissingPerson.source == source)
 
     statement = (
-        statement.order_by(MissingPerson.source_date.desc().nullslast(), MissingPerson.id.desc())
+        statement.order_by(
+            MissingPerson.source_date.desc().nullslast(), MissingPerson.id.desc()
+        )
         .offset(offset)
         .limit(limit)
     )

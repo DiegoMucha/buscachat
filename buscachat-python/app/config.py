@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     green_api_token: str = ""
     image_download_timeout_seconds: float = 30.0
 
+    # Evolution API webhook
+    evolution_api_webhook_apikey: str = ""
+
+    # Meta WhatsApp Cloud API
+    meta_verify_token: str = ""
+    meta_access_token: str = ""
+    meta_phone_number_id: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
