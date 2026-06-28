@@ -214,3 +214,48 @@ La migracion `003_face_embedding_vector` convierte la columna JSONB heredada a
 `vector(512)` y crea el indice HNSW con distancia coseno. Si la tabla tiene
 datos previos con otra dimension, la migracion fallara; en ese caso usa
 `DROP + ADD COLUMN` y re-genera los embeddings.
+
+## Generar embeddings para registros sincronizados
+
+Los registros que vienen del sync de SOS Venezuela (`sosvenezuela2026.com`)
+tienen `photo_url` pero **no** un embedding facial. Sin embedding no pueden
+encontrarse por reconocimiento facial.
+
+El script `scripts/generate_embeddings.py` descarga las fotos pendientes,
+genera el embedding con InsightFace y crea un `BotReport` vinculado al
+`MissingPerson`. **Debe ejecutarse desde la carpeta `buscachat-python`:**
+
+```bash
+cd buscachat-python
+
+# Procesar los primeros 10 registros (prueba)
+uv run python scripts/generate_embeddings.py --max 10
+
+# Procesar todos los pendientes
+uv run python scripts/generate_embeddings.py --max 0
+```
+
+**Requisitos:**
+- `FACE_MATCHER=insightface` en `.env` (el stub no reconoce rostros reales)
+- Dependencias instaladas: `uv sync --group face`
+- Postgres con extension `vector` (la migracion 003 la crea)
+
+**Que hace el script:**
+1. Busca `missing_people` con `photo_url` que **no** tengan un `bot_reports`
+   con `face_embedding`.
+2. Descarga cada foto (timeout 30s, con reintentos via httpx).
+3. Genera el vector facial de 512 dimensiones con InsightFace.
+4. Crea un `BotReport` con `channel=sosvenezuela2026`, `face_embedding`
+   y `status` igual al del `MissingPerson`.
+5. Si la foto no tiene una cara detectable, la saltea.
+6. Si la URL esta rota o el servidor no responde, registra el error y
+   sigue con la siguiente.
+
+Al final imprime: `Exitosos`, `Fallidos`, `Saltados`.
+
+**Ejecutar despues de cada sync** para mantener los embeddings al dia:
+
+```bash
+cd buscachat-python
+uv run python scripts/generate_embeddings.py --max 100
+```
