@@ -349,7 +349,7 @@ def _handle_reg_descripcion(msg: dict, chat_id: str, text: str) -> dict:
     return make_response(
         chat_id,
         canal,
-        f"📸 Enviame una *foto* de *{state['nombre']}* para ayudar a identificarla. (escribe *omitir* si no tenés)",
+        f"📸 Enviame una *foto* de *{state['nombre']}* para ayudar a identificarla/o. (escribe *omitir* si no tenés)",
     )
 
 
