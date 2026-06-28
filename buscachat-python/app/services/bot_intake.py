@@ -75,6 +75,7 @@ def register_missing_person(
         external_id=external_id,
         full_name=full_name,
         status="missing",
+        cedula_masked=datos.get("cedula"),
         last_known_location=location,
         photo_url=photo_url,
         source_date=utc_now(),
