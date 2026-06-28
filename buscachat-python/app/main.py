@@ -2,15 +2,17 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
+from fastapi import Depends, FastAPI, HTTPException, Query
 from sqlalchemy import text
 from sqlmodel import Session, select
 
-from app.config import Settings, get_settings
+from app.config import get_settings
 from app.database import get_session, run_migrations
 from app.models import MissingPerson, SyncState
 from app.routers import bot as bot_router
+from app.routers import webhook as webhook_router
 from app.scheduler import start_scheduler
+from app.security import require_private_token
 from app.services.search import find_missing_person_by_name
 
 
@@ -29,17 +31,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
 app.include_router(bot_router.router)
-
-
-def require_private_token(
-    x_api_token: Annotated[str | None, Header()] = None,
-    settings: Settings = Depends(get_settings),
-) -> None:
-    if x_api_token != settings.private_api_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API token",
-        )
+app.include_router(webhook_router.router)
 
 
 @app.get("/health/db")
