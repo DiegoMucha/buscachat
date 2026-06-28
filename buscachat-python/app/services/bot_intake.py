@@ -130,21 +130,24 @@ def search_by_photo(
     if query_embedding is None:
         return None
 
-    candidates = session.exec(
-        select(BotReport).where(BotReport.status == "missing")
-    ).all()
-
-    best_report: BotReport | None = None
-    best_score = settings.face_match_threshold
-    for candidate in candidates:
-        if not candidate.face_embedding:
-            continue
-        score = cosine_similarity(query_embedding, candidate.face_embedding)
-        if score >= best_score:
-            best_score = score
-            best_report = candidate
-
+    # Order by cosine distance in SQL so the pgvector HNSW index does the work;
+    # only the nearest candidate is fetched.
+    best_report = session.exec(
+        select(BotReport)
+        .where(BotReport.status == "missing")
+        .where(BotReport.face_embedding.is_not(None))
+        .order_by(BotReport.face_embedding.cosine_distance(query_embedding))
+        .limit(1)
+    ).first()
     if best_report is None:
+        return None
+
+    # Final threshold check with the shared utility keeps face_match_threshold's
+    # semantics identical to before.
+    if (
+        cosine_similarity(query_embedding, list(best_report.face_embedding))
+        < settings.face_match_threshold
+    ):
         return None
 
     now = utc_now()

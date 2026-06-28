@@ -12,8 +12,11 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
+
+FACE_EMBEDDING_DIM = 512
 
 
 def utc_now() -> datetime:
@@ -126,7 +129,7 @@ class BotReport(SQLModel, table=True):
 
     face_embedding: list[float] | None = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        sa_column=Column(Vector(FACE_EMBEDDING_DIM), nullable=True),
     )
     status: str = Field(
         default="missing",

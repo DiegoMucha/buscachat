@@ -1,7 +1,8 @@
 # Buscachat Python
 
-Servicio FastAPI + Postgres para sincronizar reportes de personas desde fuentes
-externas y guardarlos en nuestra propia base de datos.
+Servicio FastAPI + Postgres + pgvector para sincronizar reportes de personas
+desde fuentes externas, recibir reportes por bot (WhatsApp/Telegram) y
+emparejar rostros entre personas desaparecidas y halladas.
 
 La primera fuente implementada es:
 
@@ -15,7 +16,7 @@ la app y ejecuta el job cada 2 horas.
 ## Requisitos
 
 - `uv`
-- Docker o Docker Compose
+- Docker o Docker Compose (imagen `pgvector/pgvector:pg18`)
 - Docker local para correr pruebas e2e con testcontainers
 
 ## Setup
@@ -90,8 +91,18 @@ uv sync --group face
 FACE_MATCHER=insightface
 ```
 
-Los embeddings se guardan en `bot_reports.face_embedding` (JSONB) y la
-comparacion se hace por similitud coseno en Python.
+Los embeddings (512 dimensiones, modelo `buffalo_l` de InsightFace) se guardan
+en `bot_reports.face_embedding` como columna `vector(512)` de **pgvector**. La
+busqueda usa el operador `<=>` (distancia coseno) con un indice **HNSW**, lo
+que evita recorrer toda la tabla y escala a miles de registros sin re-arquitectura.
+
+Variables relevantes:
+
+```env
+FACE_MATCHER=stub           # "stub" (defecto, sin deps nativas) | "insightface"
+FACE_MATCH_THRESHOLD=0.35   # similitud coseno minima para considerar match
+FACE_INSIGHTFACE_MODEL=buffalo_l
+```
 
 ## Migraciones
 
@@ -177,6 +188,25 @@ Pruebas e2e con Postgres real y efimero:
 uv run pytest -m e2e
 ```
 
-La prueba e2e inicia un contenedor Postgres con testcontainers, ejecuta todas
-las migraciones SQL, corre el sync a traves de la capa adapter/service, y
+La prueba e2e de sync inicia un contenedor Postgres con testcontainers, ejecuta
+todas las migraciones, corre el sync a traves de la capa adapter/service y
 verifica upserts en `missing_people`, `source_records` y `sync_state`.
+
+La prueba e2e del bot intake (`tests/test_bot_intake_e2e.py`) usa el contenedor
+`pgvector/pgvector:pg18` para verificar el flujo completo: registrar persona con
+embedding → busqueda sin match → busqueda con match → notificacion al reportante.
+
+## Base de datos vectorial
+
+La busqueda facial no usa un servicio dedicado. La extension **pgvector** corre
+dentro del mismo Postgres:
+
+- En desarrollo local: imagen `pgvector/pgvector:pg18` en `docker-compose.yml`.
+- En produccion administrada (Supabase, Neon, RDS, etc.): ejecutar
+  `CREATE EXTENSION IF NOT EXISTS vector` (la migra-cion `003` lo hace
+  automaticamente).
+
+La migracion `003_face_embedding_vector` convierte la columna JSONB heredada a
+`vector(512)` y crea el indice HNSW con distancia coseno. Si la tabla tiene
+datos previos con otra dimension, la migracion fallara; en ese caso usa
+`DROP + ADD COLUMN` y re-genera los embeddings.
