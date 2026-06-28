@@ -40,4 +40,19 @@ retry 5 5 "$UV_BIN" sync --frozen --no-dev
 "$UV_BIN" run alembic upgrade head
 
 sudo /usr/bin/systemctl restart "$SERVICE_NAME"
-sudo /usr/bin/systemctl is-active --quiet "$SERVICE_NAME"
+sudo /usr/bin/systemctl is-active --quiet "$SERVICE_NAME" || exit 1
+
+echo "Waiting for service to be ready..."
+sleep 3
+for i in $(seq 1 10); do
+  if curl -sf http://127.0.0.1:8000/health > /dev/null 2>&1; then
+    echo "Health check passed"
+    exit 0
+  fi
+  if [ "$i" -eq 10 ]; then
+    echo "Health check failed after 10 attempts"
+    exit 1
+  fi
+  echo "Attempt $i failed, retrying in 3s..."
+  sleep 3
+done

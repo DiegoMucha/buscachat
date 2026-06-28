@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.config import Settings, get_settings
 from app.database import get_session, run_migrations
-from app.models import MissingPerson, SyncState
+from app.models import MissingPerson, SyncState, utc_now
 from app.routers import bot as bot_router
 from app.scheduler import start_scheduler
 from app.services.search import find_missing_person_by_name
@@ -40,6 +40,22 @@ def require_private_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API token",
         )
+
+
+@app.get("/health")
+def health_check(session: Annotated[Session, Depends(get_session)]) -> dict:
+    db_ok = False
+    try:
+        session.exec(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        pass
+
+    return {
+        "status": "healthy" if db_ok else "degraded",
+        "database": "ok" if db_ok else "error",
+        "timestamp": utc_now().isoformat(),
+    }
 
 
 @app.get("/health/db")
