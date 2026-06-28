@@ -155,34 +155,6 @@ def search_by_photo(
     _notify_reporter(
         notifier, best_report, searcher_contact or datos.get("contacto")
     )
-    return best_report
-    if query_embedding is None:
-        return None
-
-    # Order by cosine distance in SQL so the pgvector HNSW index does the work;
-    # only the nearest candidate is fetched.
-    best_report = session.exec(
-        select(BotReport)
-        .where(BotReport.status == "missing")
-        .where(BotReport.face_embedding.is_not(None))
-        .order_by(BotReport.face_embedding.cosine_distance(query_embedding))
-        .limit(1)
-    ).first()
-    if best_report is None:
-        return None
-
-    # Final threshold check with the shared utility keeps face_match_threshold's
-    # semantics identical to before.
-    if (
-        cosine_similarity(query_embedding, list(best_report.face_embedding))
-        < settings.face_match_threshold
-    ):
-        return None
-
-    _notify_reporter(
-        notifier, best_report, searcher_contact or datos.get("contacto")
-    )
-
     session.commit()
     session.refresh(best_report)
     return best_report

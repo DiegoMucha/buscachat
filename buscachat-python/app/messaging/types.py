@@ -9,6 +9,7 @@ class MessageSource(StrEnum):
     GREEN_API = "green-api"
     META = "meta"
     TELEGRAM = "telegram"
+    WEB = "web"
 
 
 class MessageKind(StrEnum):

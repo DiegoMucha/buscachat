@@ -10,6 +10,7 @@ from app.config import Settings, get_settings
 from app.database import get_session, run_migrations
 from app.models import MissingPerson, SyncState, utc_now
 from app.routers import bot as bot_router
+from app.routers import web_chat as web_chat_router
 from app.routers import whatsapp_evolution_api_webhook as evolution_api_webhook_router
 from app.routers import whatsapp_green_api_webhook as green_api_webhook_router
 from app.routers import whatsapp_meta_webhook as meta_webhook_router
@@ -33,6 +34,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
 app.include_router(bot_router.router)
+app.include_router(web_chat_router.router)
 app.include_router(evolution_api_webhook_router.router)
 app.include_router(green_api_webhook_router.router)
 app.include_router(meta_webhook_router.router)
