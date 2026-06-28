@@ -14,6 +14,7 @@ from app.routers.whatsapp_base import (
     get_face_matcher_dep,
     get_notifier_dep,
     run_conversation_motor,
+    set_conversation_state,
 )
 from app.services import bot_intake
 from app.adapters.green_api import Notifier
@@ -111,26 +112,90 @@ def green_webhook(
     if accion == "buscar_por_foto":
         match = bot_intake.search_by_photo(
             session, matcher, notifier, settings,
-            datos=datos,
-            imagen_ref=result.get("imagen_ref"),
+            datos=datos, imagen_ref=result.get("imagen_ref"),
             searcher_chat_id=chat_id,
             searcher_contact=datos.get("contacto") or sender,
         )
         if match:
-            return WebhookResponse(chat_id=chat_id, text=_format_match_info(match), accion=accion)
+            if match.missing_person_id:
+                set_conversation_state(chat_id, {
+                    "paso": "buscar_resultado",
+                    "person_id": match.missing_person_id,
+                    "person_name": match.full_name,
+                    "person_status": match.status,
+                })
+            text = _format_match_info(match)
+            if match.status != "found":
+                text += "\n\nRespondé *marcar* para marcarla como encontrada."
+            return WebhookResponse(chat_id=chat_id, text=text, accion=accion)
+        set_conversation_state(chat_id, None)
         return WebhookResponse(chat_id=chat_id, text="❌ No se encontró match facial.", accion=accion)
+
+    if accion == "buscar_por_cedula":
+        cedula = datos.get("query", "")
+        from app.services.search import find_missing_person_by_cedula
+        person = find_missing_person_by_cedula(session, cedula) if cedula else None
+        if person:
+            linked = _get_linked_bot_report_green(session, person.id)
+            set_conversation_state(chat_id, {
+                "paso": "buscar_resultado",
+                "person_id": person.id,
+                "person_name": person.full_name,
+                "person_status": person.status,
+            })
+            if linked:
+                text = _format_match_info(linked)
+            else:
+                text = _format_basic_info(person)
+            if person.status != "found":
+                text += "\n\nRespondé *marcar* para marcarla como encontrada."
+            return WebhookResponse(chat_id=chat_id, text=text, accion=accion)
+        set_conversation_state(chat_id, None)
+        return WebhookResponse(chat_id=chat_id, text=f"❌ No se encontró a nadie con cédula *{cedula}*.", accion=accion)
 
     if accion == "buscar_por_nombre":
         name = datos.get("query", "")
         person = bot_intake.search_by_name(session, name) if name else None
         if person:
-            extra = ""
-            if person.cedula_masked:
-                extra += f"\nCédula: {person.cedula_masked}"
-            if person.last_known_location:
-                extra += f"\nUbicación: {person.last_known_location}"
-            return WebhookResponse(chat_id=chat_id, text=f"✅ *{person.full_name}*\nEstado: {person.status}{extra}", accion=accion)
+            linked = _get_linked_bot_report_green(session, person.id)
+            set_conversation_state(chat_id, {
+                "paso": "buscar_resultado",
+                "person_id": person.id,
+                "person_name": person.full_name,
+                "person_status": person.status,
+            })
+            if linked:
+                text = _format_match_info(linked)
+            else:
+                text = _format_basic_info(person)
+            if person.status != "found":
+                text += "\n\nRespondé *marcar* para marcarla como encontrada."
+            return WebhookResponse(chat_id=chat_id, text=text, accion=accion)
+        set_conversation_state(chat_id, None)
         return WebhookResponse(chat_id=chat_id, text=f"❌ No se encontró a *{name}*.", accion=accion)
+
+    if accion == "marcar_encontrado":
+        person_id = datos.get("person_id")
+        if person_id:
+            from sqlmodel import select
+            from app.models import MissingPerson, BotReport, utc_now
+            now = utc_now()
+            person = session.get(MissingPerson, person_id)
+            if person and person.status != "found":
+                person.status = "found"
+                person.updated_at = now
+                session.add(person)
+                linked = session.exec(select(BotReport).where(BotReport.missing_person_id == person_id)).all()
+                for rp in linked:
+                    if rp.status != "found":
+                        rp.status = "found"
+                        rp.found_at = now
+                        rp.updated_at = now
+                        session.add(rp)
+                session.commit()
+                return WebhookResponse(chat_id=chat_id, text=f"✅ *{person.full_name}* marcada como *encontrada*.", accion=accion)
+            return WebhookResponse(chat_id=chat_id, text="Esa persona ya estaba marcada como encontrada.", accion=accion)
+        return WebhookResponse(chat_id=chat_id, text="No se pudo identificar a la persona.", accion=accion)
 
     return WebhookResponse(chat_id=chat_id, text="Listo.")
 
@@ -145,5 +210,25 @@ def _format_match_info(report) -> str:
         parts.append(f"📍 Ubicación: {report.location}")
     if getattr(report, "contact", None):
         parts.append(f"📞 Contacto: {report.contact}")
-    parts.append(f"📊 Estado: {report.status}")
+    status_text = "🟢 Encontrado/a" if report.status == "found" else "🔴 Desaparecido/a"
+    parts.append(status_text)
     return "\n".join(parts)
+
+
+def _format_basic_info(person) -> str:
+    parts = [f"✅ *{person.full_name}*"]
+    if getattr(person, "cedula_masked", None):
+        parts.append(f"🪪 Cédula: {person.cedula_masked}")
+    if getattr(person, "last_known_location", None):
+        parts.append(f"📍 Última ubicación: {person.last_known_location}")
+    status_text = "🟢 Encontrado/a" if person.status == "found" else "🔴 Desaparecido/a"
+    parts.append(status_text)
+    return "\n".join(parts)
+
+
+def _get_linked_bot_report_green(session: Session, missing_person_id: int):
+    from sqlmodel import select
+    from app.models import BotReport
+    return session.exec(
+        select(BotReport).where(BotReport.missing_person_id == missing_person_id)
+    ).first()

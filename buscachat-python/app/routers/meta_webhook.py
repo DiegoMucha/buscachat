@@ -16,6 +16,7 @@ from app.routers.whatsapp_base import (
     get_notifier_dep,
     run_conversation_motor,
     save_embedding_for_chat,
+    set_conversation_state,
 )
 from app.services import bot_intake
 from app.adapters.green_api import Notifier
@@ -106,7 +107,7 @@ def _download_meta_image(media_id: str, access_token: str, *, timeout: float = 3
 
 def _send_meta_message(chat_id: str, text: str, settings: Settings, buttons: list[tuple[str, str]] | None = None) -> None:
     if not settings.meta_access_token or not settings.meta_phone_number_id:
-        log.warning("Meta credentials missing; not sending: %s → %s", chat_id, text[:80])
+        print(f"[META] SKIP: no credentials for {chat_id}")
         return
 
     if buttons:
@@ -144,9 +145,9 @@ def _send_meta_message(chat_id: str, text: str, settings: Settings, buttons: lis
                 json=payload,
             )
             resp.raise_for_status()
-            log.info("Meta message sent to %s", chat_id)
-    except Exception:
-        log.exception("Failed to send Meta message to %s", chat_id)
+            print(f"[META] ✅ sent to {chat_id}: {text[:60]}")
+    except Exception as exc:
+        print(f"[META] ❌ FAIL sending to {chat_id}: {text[:60]} — {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +218,8 @@ async def meta_webhook(
                 channel=result.get("canal", "whatsapp"),
                 sender=result.get("sender", ""), reporter_name=result.get("nombre"),
             )
-        _send_meta_message(chat_id, f"✅ Registro creado (ID: {report.id}). Gracias por ayudar.", settings)
+        _send_meta_message(chat_id, f"✅ Registro creado (ID: {report.id}). Gracias por ayudar.", settings,
+                           buttons=[("menu", "Menu")])
         return Response(content="ok", media_type="text/plain")
 
     # ── BUSCAR POR FOTO ──
@@ -234,9 +236,54 @@ async def meta_webhook(
             searcher_contact=datos.get("contacto") or result.get("sender", ""),
         )
         if match:
-            _send_meta_message(chat_id, _format_person_info(match), settings)
+            # Guardar en estado para que el usuario pueda marcar como encontrado
+            if match.missing_person_id:
+                set_conversation_state(chat_id, {
+                    "paso": "buscar_resultado",
+                    "person_id": match.missing_person_id,
+                    "person_name": match.full_name,
+                    "person_status": match.status,
+                })
+            info = _format_person_info(match)
+            _send_meta_message(chat_id, info, settings)
+            _send_meta_message(chat_id, "¿Marcar como encontrada?", settings,
+                               buttons=[("marcar", "Marcar encontrada"), ("menu", "Menu")])
         else:
-            _send_meta_message(chat_id, "❌ No se encontró match facial en nuestros registros.", settings)
+            set_conversation_state(chat_id, None)
+            _send_meta_message(chat_id, "❌ No se encontró match facial.", settings,
+                               buttons=[("menu", "Menu")])
+        return Response(content="ok", media_type="text/plain")
+
+    # ── BUSCAR POR CÉDULA ──
+    if accion == "buscar_por_cedula":
+        cedula = datos.get("query", "")
+        from app.services.search import find_missing_person_by_cedula
+        person = find_missing_person_by_cedula(session, cedula) if cedula else None
+        if person:
+            linked = _get_linked_bot_report(session, person.id)
+            set_conversation_state(chat_id, {
+                "paso": "buscar_resultado",
+                "person_id": person.id,
+                "person_name": person.full_name,
+                "person_status": person.status,
+            })
+            if linked:
+                linked._linked_location = person.last_known_location
+                linked._linked_cedula = person.cedula_masked
+                info = _format_person_info(linked)
+            else:
+                info = _format_missing_person_info(person)
+            _send_meta_message(chat_id, info, settings)
+            if person.status != "found":
+                _send_meta_message(chat_id, "¿Marcar como encontrada?", settings,
+                                   buttons=[("marcar", "Marcar encontrada"), ("menu", "Menu")])
+            else:
+                _send_meta_message(chat_id, "¿Qué deseás hacer?", settings,
+                                   buttons=[("menu", "Menu")])
+        else:
+            set_conversation_state(chat_id, None)
+            _send_meta_message(chat_id, f"❌ No se encontró a nadie con cédula *{cedula}*.", settings,
+                               buttons=[("menu", "Menu")])
         return Response(content="ok", media_type="text/plain")
 
     # ── BUSCAR POR NOMBRE ──
@@ -244,14 +291,63 @@ async def meta_webhook(
         name = datos.get("query", "")
         person = bot_intake.search_by_name(session, name) if name else None
         if person:
-            extra = ""
-            if person.cedula_masked:
-                extra += f"\nCédula: {person.cedula_masked}"
-            if person.last_known_location:
-                extra += f"\nUbicación: {person.last_known_location}"
-            _send_meta_message(chat_id, f"✅ *{person.full_name}*\nEstado: {person.status}{extra}", settings)
+            linked = _get_linked_bot_report(session, person.id)
+            set_conversation_state(chat_id, {
+                "paso": "buscar_resultado",
+                "person_id": person.id,
+                "person_name": person.full_name,
+                "person_status": person.status,
+            })
+            if linked:
+                linked._linked_location = person.last_known_location
+                linked._linked_cedula = person.cedula_masked
+                info = _format_person_info(linked)
+            else:
+                info = _format_missing_person_info(person)
+            _send_meta_message(chat_id, info, settings)
+            if person.status != "found":
+                _send_meta_message(chat_id, "¿Marcar como encontrada?", settings,
+                                   buttons=[("marcar", "Marcar encontrada"), ("menu", "Menu")])
+            else:
+                _send_meta_message(chat_id, "¿Qué deseás hacer?", settings,
+                                   buttons=[("menu", "Menu")])
         else:
-            _send_meta_message(chat_id, f"❌ No se encontró a *{name}*.", settings)
+            set_conversation_state(chat_id, None)
+            _send_meta_message(chat_id, f"❌ No se encontró a *{name}*.", settings,
+                               buttons=[("menu", "Menu")])
+        return Response(content="ok", media_type="text/plain")
+
+    # ── MARCAR COMO ENCONTRADO ──
+    if accion == "marcar_encontrado":
+        person_id = datos.get("person_id")
+        if person_id:
+            from sqlmodel import select as _sel
+            from app.models import MissingPerson, BotReport, utc_now
+            now = utc_now()
+            person = session.get(MissingPerson, person_id)
+            if person and person.status != "found":
+                person.status = "found"
+                person.updated_at = now
+                session.add(person)
+                # Actualizar también todos los BotReports vinculados
+                linked_reports = session.exec(
+                    _sel(BotReport).where(BotReport.missing_person_id == person_id)
+                ).all()
+                for rp in linked_reports:
+                    if rp.status != "found":
+                        rp.status = "found"
+                        rp.found_at = now
+                        rp.updated_at = now
+                        session.add(rp)
+                session.commit()
+                _send_meta_message(chat_id, f"✅ *{person.full_name}* marcada como *encontrada*. ¡Gracias por ayudar!", settings,
+                                   buttons=[("menu", "Menu")])
+            else:
+                _send_meta_message(chat_id, "✅ Esa persona ya estaba marcada como encontrada.", settings,
+                                   buttons=[("menu", "Menu")])
+        else:
+            _send_meta_message(chat_id, "No se pudo identificar a la persona.", settings,
+                               buttons=[("menu", "Menu")])
         return Response(content="ok", media_type="text/plain")
 
     return Response(content="ok", media_type="text/plain")
@@ -324,21 +420,17 @@ def _meta_search_by_embedding(
     if best_report is None:
         return None
 
+    from app.models import utc_now
     now = utc_now()
-    best_report.status = "found"
-    best_report.found_at = now
-    best_report.updated_at = now
-    session.add(best_report)
 
+    # Cargar datos del MissingPerson vinculado para mostrar en la respuesta
     if best_report.missing_person_id is not None:
         person = session.get(MissingPerson, best_report.missing_person_id)
         if person is not None:
-            person.status = "found"
-            person.updated_at = now
-            session.add(person)
             best_report._linked_location = person.last_known_location
             best_report._linked_cedula = person.cedula_masked
 
+    # Notificar al reportante (NO cambia status — eso lo hace el usuario)
     if best_report.channel == "whatsapp":
         message = f"¡Buenas noticias! {best_report.full_name} fue reportada como encontrada."
         if searcher_contact:
@@ -367,7 +459,28 @@ def _format_person_info(report: Any) -> str:
         parts.append(f"📍 Última ubicación: {ubicacion}")
     if getattr(report, "contact", None):
         parts.append(f"📞 Contacto: {report.contact}")
-    if getattr(report, "_linked_cedula", None):
-        parts.append(f"🪪 Cédula: {report._linked_cedula}")
-    parts.append(f"📊 Estado: {report.status}")
+    if getattr(report, "_linked_cedula", None) or getattr(report, "cedula_masked", None):
+        parts.append(f"🪪 Cédula: {getattr(report, '_linked_cedula', None) or getattr(report, 'cedula_masked', None)}")
+    status_text = "🟢 Encontrado/a" if report.status == "found" else "🔴 Desaparecido/a"
+    parts.append(status_text)
     return "\n".join(parts)
+
+
+def _format_missing_person_info(person: Any) -> str:
+    """Formatea info de un MissingPerson (cuando no hay BotReport vinculado)."""
+    parts = [f"✅ *{person.full_name}*"]
+    if getattr(person, "cedula_masked", None):
+        parts.append(f"🪪 Cédula: {person.cedula_masked}")
+    if getattr(person, "last_known_location", None):
+        parts.append(f"📍 Última ubicación: {person.last_known_location}")
+    status_text = "🟢 Encontrado/a" if person.status == "found" else "🔴 Desaparecido/a"
+    parts.append(status_text)
+    return "\n".join(parts)
+
+
+def _get_linked_bot_report(session: Session, missing_person_id: int) -> Any | None:
+    from sqlmodel import select
+    from app.models import BotReport
+    return session.exec(
+        select(BotReport).where(BotReport.missing_person_id == missing_person_id)
+    ).first()

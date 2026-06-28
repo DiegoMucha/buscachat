@@ -120,14 +120,40 @@ def search_by_photo(
     """Search registered reports by face.
 
     If a registered (``missing``) report matches the uploaded photo above the
-    configured threshold, mark that person as found, notify the original reporter
-    via the notifier, and return the matched report. Returns ``None`` when no
-    photo, no detectable face, or no match above the threshold.
+    configured threshold, notify the original reporter via the notifier and
+    return the matched report. Returns ``None`` when no photo, no detectable
+    face, or no match above the threshold.
+
+    The status is NOT changed automatically — the searcher must explicitly
+    confirm via the "Marcar como encontrada" action.
     """
     photo_url = _photo_ref(datos, imagen_ref)
     query_embedding = _embed_from_url(
         matcher, photo_url, timeout=settings.image_download_timeout_seconds
     )
+    if query_embedding is None:
+        return None
+
+    best_report = session.exec(
+        select(BotReport)
+        .where(BotReport.status == "missing")
+        .where(BotReport.face_embedding.is_not(None))
+        .order_by(BotReport.face_embedding.cosine_distance(query_embedding))
+        .limit(1)
+    ).first()
+    if best_report is None:
+        return None
+
+    if (
+        cosine_similarity(query_embedding, list(best_report.face_embedding))
+        < settings.face_match_threshold
+    ):
+        return None
+
+    _notify_reporter(
+        notifier, best_report, searcher_contact or datos.get("contacto")
+    )
+    return best_report
     if query_embedding is None:
         return None
 
