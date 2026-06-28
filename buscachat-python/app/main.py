@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.config import Settings, get_settings
 from app.database import get_session, run_migrations
-from app.models import MissingPerson, SyncState
+from app.models import MissingPerson, SyncState, utc_now
 from app.routers import bot as bot_router
 from app.routers import whatsapp_evolution_api_webhook as evolution_api_webhook_router
 from app.routers import whatsapp_green_api_webhook as green_api_webhook_router
@@ -36,6 +36,22 @@ app.include_router(bot_router.router)
 app.include_router(evolution_api_webhook_router.router)
 app.include_router(green_api_webhook_router.router)
 app.include_router(meta_webhook_router.router)
+
+
+@app.get("/health")
+def health_check(session: Annotated[Session, Depends(get_session)]) -> dict:
+    db_ok = False
+    try:
+        session.exec(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        pass
+
+    return {
+        "status": "healthy" if db_ok else "degraded",
+        "database": "ok" if db_ok else "error",
+        "timestamp": utc_now().isoformat(),
+    }
 
 
 @app.get("/health/db")
