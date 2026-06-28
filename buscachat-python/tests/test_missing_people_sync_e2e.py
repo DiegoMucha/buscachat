@@ -12,7 +12,6 @@ from app.models import MissingPerson, SourceRecord, SyncState
 from app.services import sync_missing_people
 from app.services.search import find_missing_person_by_name
 
-
 pytestmark = pytest.mark.e2e
 
 
@@ -21,8 +20,10 @@ class FakeMissingPeopleAdapter:
 
     def __init__(self, pages: list[list[MissingPersonPayload]]) -> None:
         self.pages = pages
+        self.fetches: list[tuple[int, int]] = []
 
     def fetch_page(self, *, offset: int, limit: int) -> list[MissingPersonPayload]:
+        self.fetches.append((offset, limit))
         page_index = offset // limit
         if page_index >= len(self.pages):
             return []
@@ -69,15 +70,20 @@ def test_missing_people_sync_runs_migrations_and_upserts(postgres_url: str) -> N
             [],
         ]
     )
+    first_sleep_delays: list[float] = []
 
     with Session(engine) as session:
         result = sync_missing_people(
             session=session,
             adapter=first_adapter,
             page_limit=2,
+            sleep=first_sleep_delays.append,
+            monotonic=lambda: 0.0,
         )
         assert result.records_seen == 2
         assert result.records_upserted == 2
+        assert first_adapter.fetches == [(0, 2), (2, 2)]
+        assert first_sleep_delays == [pytest.approx(1.2)]
 
     second_adapter = FakeMissingPeopleAdapter(
         [
@@ -96,14 +102,19 @@ def test_missing_people_sync_runs_migrations_and_upserts(postgres_url: str) -> N
             [],
         ]
     )
+    second_sleep_delays: list[float] = []
 
     with Session(engine) as session:
         result = sync_missing_people(
             session=session,
             adapter=second_adapter,
             page_limit=1,
+            sleep=second_sleep_delays.append,
+            monotonic=lambda: 0.0,
         )
         assert result.records_seen == 1
+        assert second_adapter.fetches == [(0, 1), (1, 1)]
+        assert second_sleep_delays == [pytest.approx(1.2)]
 
         people = session.exec(select(MissingPerson)).all()
         source_records = session.exec(select(SourceRecord)).all()
@@ -115,9 +126,7 @@ def test_missing_people_sync_runs_migrations_and_upserts(postgres_url: str) -> N
         assert sync_state.last_records_seen == 1
         assert sync_state.last_error is None
 
-        person_1 = session.exec(
-            select(MissingPerson).where(MissingPerson.external_id == "person-1")
-        ).one()
+        person_1 = session.exec(select(MissingPerson).where(MissingPerson.external_id == "person-1")).one()
         assert person_1.status == "found"
         assert person_1.source_date == updated_seen
 

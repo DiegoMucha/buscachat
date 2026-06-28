@@ -1,11 +1,16 @@
+import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import count, islice
 
 from sqlalchemy.dialects.postgresql import insert
 from sqlmodel import Session
 
 from app.adapters.base import MissingPeopleAdapter, MissingPersonPayload
 from app.models import MissingPerson, SourceRecord, SyncState, utc_now
+
+MISSING_PEOPLE_SYNC_REQUESTS_PER_MINUTE: float | None = 50
 
 
 @dataclass(frozen=True)
@@ -22,36 +27,30 @@ def sync_missing_people(
     adapter: MissingPeopleAdapter,
     page_limit: int,
     max_pages: int | None = None,
+    requests_per_minute: float | None = MISSING_PEOPLE_SYNC_REQUESTS_PER_MINUTE,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> SyncResult:
     records_seen = 0
     records_upserted = 0
     last_source_date: datetime | None = None
-    offset = 0
-    pages_seen = 0
 
     try:
-        while True:
-            if max_pages is not None and pages_seen >= max_pages:
-                break
-
-            page = adapter.fetch_page(offset=offset, limit=page_limit)
-            pages_seen += 1
-            if not page:
-                break
-
+        for page in _iter_missing_people_pages(
+            adapter=adapter,
+            page_limit=page_limit,
+            max_pages=max_pages,
+            requests_per_minute=requests_per_minute,
+            sleep=sleep,
+            monotonic=monotonic,
+        ):
             for record in page:
                 records_seen += 1
                 records_upserted += _upsert_record(session, record)
-                if record.source_date and (
-                    last_source_date is None or record.source_date > last_source_date
-                ):
+                if record.source_date and (last_source_date is None or record.source_date > last_source_date):
                     last_source_date = record.source_date
 
             session.commit()
-
-            if len(page) < page_limit:
-                break
-            offset += page_limit
 
         _upsert_sync_state(
             session,
@@ -82,6 +81,48 @@ def sync_missing_people(
         )
         session.commit()
         raise
+
+
+def _iter_missing_people_pages(
+    *,
+    adapter: MissingPeopleAdapter,
+    page_limit: int,
+    max_pages: int | None,
+    requests_per_minute: float | None,
+    sleep: Callable[[float], None],
+    monotonic: Callable[[], float],
+) -> Iterator[list[MissingPersonPayload]]:
+    page_indexes = count()
+    if max_pages is not None:
+        page_indexes = islice(page_indexes, max_pages)
+
+    request_interval_seconds = _request_interval_seconds(requests_per_minute)
+    last_request_at: float | None = None
+
+    for page_index in page_indexes:
+        if last_request_at is not None and request_interval_seconds > 0:
+            elapsed_seconds = monotonic() - last_request_at
+            delay_seconds = request_interval_seconds - elapsed_seconds
+            if delay_seconds > 0:
+                sleep(delay_seconds)
+
+        last_request_at = monotonic()
+        page = adapter.fetch_page(offset=page_index * page_limit, limit=page_limit)
+        if not page:
+            return
+
+        yield page
+
+        if len(page) < page_limit:
+            return
+
+
+def _request_interval_seconds(requests_per_minute: float | None) -> float:
+    if requests_per_minute is None:
+        return 0
+    if requests_per_minute <= 0:
+        raise ValueError("requests_per_minute must be positive or None")
+    return 60 / requests_per_minute
 
 
 def _upsert_record(session: Session, record: MissingPersonPayload) -> int:
