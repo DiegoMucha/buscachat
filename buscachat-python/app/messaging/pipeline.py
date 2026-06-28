@@ -6,6 +6,7 @@ from app.adapters.green_api import Notifier
 from app.config import Settings
 from app.face import FaceMatcher
 from app.messaging.conversation import run_conversation_motor, set_conversation_state
+from app.messaging.session_store import ConversationStateStore
 from app.messaging.types import Button, GenericInboundMessage, GenericOutboundMessage
 from app.models import BotReport, MissingPerson
 from app.services import bot_intake
@@ -19,8 +20,12 @@ def run_message_pipeline(
     matcher: FaceMatcher,
     notifier: Notifier,
     settings: Settings,
+    conversation_store: ConversationStateStore | None = None,
 ) -> GenericOutboundMessage:
-    result = run_conversation_motor(message.to_conversation_payload())
+    result = run_conversation_motor(
+        message.to_conversation_payload(),
+        store=conversation_store,
+    )
     buttons = [
         Button(id=str(button_id), title=str(title))
         for button_id, title in result.get("buttons", [])
@@ -81,6 +86,7 @@ def run_message_pipeline(
                         "person_name": match.full_name,
                         "person_status": match.status,
                     },
+                    conversation_store,
                 )
             text = _format_bot_report(match)
             out_buttons = []
@@ -96,7 +102,7 @@ def run_message_pipeline(
                 buttons=out_buttons,
             )
 
-        set_conversation_state(chat_id, None)
+        set_conversation_state(chat_id, None, conversation_store)
         return GenericOutboundMessage(
             source=message.source,
             chat_id=chat_id,
@@ -115,6 +121,7 @@ def run_message_pipeline(
             action,
             person,
             f"No se encontro a nadie con cedula *{cedula}*.",
+            conversation_store,
         )
 
     if action == "buscar_por_nombre":
@@ -127,6 +134,7 @@ def run_message_pipeline(
             action,
             person,
             f"No se encontro a *{name}*.",
+            conversation_store,
         )
 
     if action == "marcar_encontrado":
@@ -154,9 +162,10 @@ def _search_person_response(
     action: str,
     person: MissingPerson | None,
     not_found_text: str,
+    conversation_store: ConversationStateStore | None,
 ) -> GenericOutboundMessage:
     if person is None:
-        set_conversation_state(chat_id, None)
+        set_conversation_state(chat_id, None, conversation_store)
         return GenericOutboundMessage(
             source=message.source,
             chat_id=chat_id,
@@ -174,6 +183,7 @@ def _search_person_response(
             "person_name": person.full_name,
             "person_status": person.status,
         },
+        conversation_store,
     )
     if linked:
         linked._linked_location = person.last_known_location

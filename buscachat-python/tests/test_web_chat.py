@@ -30,6 +30,7 @@ def _client() -> TestClient:
     app.dependency_overrides[get_settings] = lambda: Settings(
         face_matcher="stub",
         notifier="null",
+        conversation_state_store="in_memory",
     )
     return TestClient(app)
 

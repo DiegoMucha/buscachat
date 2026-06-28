@@ -6,6 +6,11 @@ from fastapi import Depends
 from app.adapters.green_api import Notifier, get_notifier
 from app.config import Settings, get_settings
 from app.face import FaceMatcher, get_face_matcher
+from app.messaging.adapters.evolution_api import EvolutionApiSender, get_evolution_api_sender
+from app.messaging.session_store import (
+    ConversationStateStore,
+    get_conversation_state_store,
+)
 
 
 @lru_cache
@@ -24,3 +29,15 @@ def get_notifier_dependency(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Notifier:
     return get_notifier(settings)
+
+
+def get_conversation_state_store_dependency(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ConversationStateStore:
+    return get_conversation_state_store(settings)
+
+
+def get_evolution_api_sender_dependency(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> EvolutionApiSender:
+    return get_evolution_api_sender(settings)

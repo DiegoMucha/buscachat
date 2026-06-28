@@ -12,10 +12,12 @@ from app.face import FaceMatcher
 from app.messaging.adapters.web import WEB_CHAT_ID, adapt_web_message
 from app.messaging.conversation import set_conversation_state
 from app.messaging.dependencies import (
+    get_conversation_state_store_dependency,
     get_face_matcher_dependency,
     get_notifier_dependency,
 )
 from app.messaging.pipeline import run_message_pipeline
+from app.messaging.session_store import ConversationStateStore
 from app.messaging.web_chat_store import WebChatMessage, web_chat_store
 
 router = APIRouter(prefix="/web-chat", tags=["web-chat"])
@@ -48,9 +50,14 @@ def list_web_chat_messages(
 
 
 @router.delete("/messages", response_model=WebChatClearResponse)
-def clear_web_chat_messages() -> WebChatClearResponse:
+def clear_web_chat_messages(
+    conversation_store: Annotated[
+        ConversationStateStore,
+        Depends(get_conversation_state_store_dependency),
+    ],
+) -> WebChatClearResponse:
     web_chat_store.clear()
-    set_conversation_state(WEB_CHAT_ID, None)
+    set_conversation_state(WEB_CHAT_ID, None, conversation_store)
     return WebChatClearResponse()
 
 
@@ -60,6 +67,10 @@ def web_chat_webhook(
     session: Annotated[Session, Depends(get_session)],
     matcher: Annotated[FaceMatcher, Depends(get_face_matcher_dependency)],
     notifier: Annotated[Notifier, Depends(get_notifier_dependency)],
+    conversation_store: Annotated[
+        ConversationStateStore,
+        Depends(get_conversation_state_store_dependency),
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> WebChatSendResponse:
     if not payload.text.strip() and not payload.image_ref:
@@ -76,6 +87,7 @@ def web_chat_webhook(
         matcher=matcher,
         notifier=notifier,
         settings=settings,
+        conversation_store=conversation_store,
     )
     bot_message = web_chat_store.add_bot_message(outbound)
     return WebChatSendResponse(messages=[user_message, bot_message])
@@ -266,7 +278,8 @@ _WEB_CHAT_HTML = """<!doctype html>
     </header>
     <main>
       <section id="messages" aria-live="polite">
-        <p class="empty">Send <strong>hola</strong> or <strong>menu</strong> to start. Use the optional image field only when the bot asks for a photo.</p>
+        <p class="empty">Send <strong>hola</strong> or <strong>menu</strong> to start.
+        Use the optional image field only when the bot asks for a photo.</p>
       </section>
       <form id="composer" class="composer">
         <div class="fields">
@@ -370,7 +383,8 @@ _WEB_CHAT_HTML = """<!doctype html>
       await fetch("/web-chat/messages", { method: "DELETE" });
       lastId = 0;
       seen.clear();
-      messagesEl.innerHTML = '<p class="empty">Chat cleared. Send <strong>hola</strong> or <strong>menu</strong> to start.</p>';
+      messagesEl.innerHTML = '<p class="empty">Chat cleared. Send <strong>hola</strong> ' +
+        'or <strong>menu</strong> to start.</p>';
     });
 
     poll();

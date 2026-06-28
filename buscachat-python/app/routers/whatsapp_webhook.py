@@ -681,16 +681,6 @@ async def meta_webhook(
                 sender=result.get("sender", ""),
                 reporter_name=result.get("nombre"),
             )
-        else:
-            report = bot_intake.register_missing_person(
-                session, matcher, settings,
-                datos=datos,
-                imagen_ref=result.get("imagen_ref"),
-                chat_id=chat_id,
-                channel=result.get("canal", "whatsapp"),
-                sender=result.get("sender", ""),
-                reporter_name=result.get("nombre"),
-            )
         _send_meta_message(chat_id, f"✅ Registro creado (ID: {report.id}). Gracias por ayudar.", settings)
         return Response(content="ok", media_type="text/plain")
 

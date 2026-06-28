@@ -1,9 +1,11 @@
 import json
+from functools import partial
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlmodel import Session, delete, select
+from starlette.concurrency import run_in_threadpool
 
 from app.adapters.green_api import Notifier
 from app.config import Settings, get_settings
@@ -11,15 +13,19 @@ from app.database import get_session
 from app.face import FaceMatcher
 from app.messaging.adapters.evolution_api import (
     EvolutionApiAuthenticationError,
+    EvolutionApiSender,
     adapt_evolution_api_message,
     redact_evolution_api_secret,
     require_evolution_api_key,
 )
 from app.messaging.dependencies import (
+    get_conversation_state_store_dependency,
+    get_evolution_api_sender_dependency,
     get_face_matcher_dependency,
     get_notifier_dependency,
 )
 from app.messaging.pipeline import run_message_pipeline
+from app.messaging.session_store import ConversationStateStore
 from app.models import WebhookEventLog
 from app.security import require_private_token
 
@@ -37,6 +43,7 @@ class WebhookCaptureResponse(BaseModel):
     text: str | None = None
     accion: str | None = None
     buttons: list[dict[str, str]] = []
+    sent: bool = False
 
 
 class WebhookDeleteResponse(BaseModel):
@@ -102,6 +109,14 @@ async def whatsapp_evolution_api_webhook(
     session: Annotated[Session, Depends(get_session)],
     matcher: Annotated[FaceMatcher, Depends(get_face_matcher_dependency)],
     notifier: Annotated[Notifier, Depends(get_notifier_dependency)],
+    conversation_store: Annotated[
+        ConversationStateStore,
+        Depends(get_conversation_state_store_dependency),
+    ],
+    evolution_sender: Annotated[
+        EvolutionApiSender,
+        Depends(get_evolution_api_sender_dependency),
+    ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> WebhookCaptureResponse:
     body = await _request_body(request)
@@ -125,6 +140,15 @@ async def whatsapp_evolution_api_webhook(
         matcher=matcher,
         notifier=notifier,
         settings=settings,
+        conversation_store=conversation_store,
+    )
+    sent = await run_in_threadpool(
+        partial(
+            evolution_sender.send_text,
+            outbound.chat_id,
+            outbound.text,
+            buttons=outbound.buttons,
+        )
     )
     return WebhookCaptureResponse(
         log_id=event_log.id,
@@ -132,6 +156,7 @@ async def whatsapp_evolution_api_webhook(
         text=outbound.text,
         accion=outbound.action,
         buttons=[button.model_dump() for button in outbound.buttons],
+        sent=sent,
     )
 
 

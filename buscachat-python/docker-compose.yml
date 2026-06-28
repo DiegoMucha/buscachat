@@ -17,5 +17,18 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:latest
+    container_name: my-redis
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    environment:
+      - REDIS_ARGS=--requirepass ${REDIS_PASSWORD:-your_password_here} --appendonly yes
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  redis-data:
+    driver: local
