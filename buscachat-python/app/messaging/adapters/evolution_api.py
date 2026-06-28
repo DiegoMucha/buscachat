@@ -5,6 +5,7 @@ import threading
 import time
 from copy import deepcopy
 from typing import Any, Protocol
+from urllib.parse import quote
 
 import httpx
 
@@ -190,6 +191,7 @@ class EvolutionApiHttpSender:
         self.timeout = timeout
         self.delay_min_seconds = max(0.0, delay_min_seconds)
         self.delay_max_seconds = max(self.delay_min_seconds, delay_max_seconds)
+        self._resolved_instance_name: str | None = None
 
     @staticmethod
     def _number(chat_id: str) -> str:
@@ -217,17 +219,63 @@ class EvolutionApiHttpSender:
             "apikey": self.apikey,
         }
 
-    def _post_json(self, path: str, payload: dict[str, Any]) -> bool:
+    def _instance_name(self) -> str:
+        return self._resolved_instance_name or self.instance_name
+
+    def _instance_path(self, endpoint: str) -> str:
+        instance = quote(self._instance_name(), safe="")
+        return f"/message/{endpoint}/{instance}"
+
+    def _resolve_instance_name(self, client: httpx.Client) -> str:
+        if self._resolved_instance_name:
+            return self._resolved_instance_name
+
+        response = client.get(
+            f"{self.base_url}/instance/fetchInstances",
+            headers=self._headers(),
+        )
+        response.raise_for_status()
+
+        instances = response.json()
+        if not isinstance(instances, list):
+            return self.instance_name
+
+        for instance in instances:
+            if not isinstance(instance, dict):
+                continue
+
+            name = instance.get("name")
+            if instance.get("id") == self.instance_name and isinstance(name, str) and name:
+                self._resolved_instance_name = name
+                log.info("Resolved Evolution API instance id to name: %s", name)
+                return name
+
+            if name == self.instance_name:
+                self._resolved_instance_name = self.instance_name
+                return self.instance_name
+
+        return self.instance_name
+
+    def _post_instance_json(self, endpoint: str, payload: dict[str, Any]) -> bool:
         delay = random.uniform(self.delay_min_seconds, self.delay_max_seconds)
         with _send_lock:
             time.sleep(delay)
             try:
                 with httpx.Client(timeout=self.timeout) as client:
                     response = client.post(
-                        f"{self.base_url}{path}",
+                        f"{self.base_url}{self._instance_path(endpoint)}",
                         headers=self._headers(),
                         json=payload,
                     )
+                    if response.status_code == 404:
+                        original_instance = self._instance_name()
+                        resolved_instance = self._resolve_instance_name(client)
+                        if resolved_instance != original_instance:
+                            response = client.post(
+                                f"{self.base_url}{self._instance_path(endpoint)}",
+                                headers=self._headers(),
+                                json=payload,
+                            )
                     response.raise_for_status()
                     return True
             except Exception:
@@ -246,7 +294,7 @@ class EvolutionApiHttpSender:
             "text": self._render_text_options(text, buttons),
             "linkPreview": False,
         }
-        return self._post_json(f"/message/sendText/{self.instance_name}", payload)
+        return self._post_instance_json("sendText", payload)
 
     def send_media_url(
         self,
@@ -266,7 +314,7 @@ class EvolutionApiHttpSender:
             "media": media_url,
             "fileName": file_name,
         }
-        return self._post_json(f"/message/sendMedia/{self.instance_name}", payload)
+        return self._post_instance_json("sendMedia", payload)
 
 
 def get_evolution_api_sender(settings: Settings) -> EvolutionApiSender:

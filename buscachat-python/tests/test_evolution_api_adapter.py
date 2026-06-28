@@ -3,11 +3,12 @@ import pytest
 from app.config import Settings
 from app.messaging.adapters.evolution_api import (
     EvolutionApiAuthenticationError,
+    EvolutionApiHttpSender,
     adapt_evolution_api_message,
     redact_evolution_api_secret,
     require_evolution_api_key,
 )
-from app.messaging.types import MessageKind, MessageSource
+from app.messaging.types import Button, MessageKind, MessageSource
 
 
 def _base_payload(message: dict, message_type: str = "conversation") -> dict:
@@ -85,3 +86,71 @@ def test_redact_evolution_api_secret_supports_captured_wrapper_shape() -> None:
 
     assert redacted["body"]["apikey"] == "***redacted***"
     assert payload["body"]["apikey"] == "secret"
+
+
+def test_sender_resolves_instance_id_to_name_after_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        def __init__(self, status_code: int, data: object | None = None) -> None:
+            self.status_code = status_code
+            self._data = data
+
+        def json(self) -> object:
+            return self._data
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise AssertionError(f"unexpected HTTP error in test: {self.status_code}")
+
+    class FakeClient:
+        posts: list[dict] = []
+        gets: list[str] = []
+
+        def __init__(self, timeout: float) -> None:
+            self.timeout = timeout
+
+        def __enter__(self) -> "FakeClient":
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def post(self, url: str, *, headers: dict[str, str], json: dict) -> FakeResponse:
+            self.posts.append({"url": url, "headers": headers, "json": json})
+            if url.endswith("/message/sendText/instance-id"):
+                return FakeResponse(404)
+            return FakeResponse(201)
+
+        def get(self, url: str, *, headers: dict[str, str]) -> FakeResponse:
+            self.gets.append(url)
+            return FakeResponse(200, [{"id": "instance-id", "name": "LozaBot II"}])
+
+    FakeClient.posts = []
+    FakeClient.gets = []
+    monkeypatch.setattr("app.messaging.adapters.evolution_api.httpx.Client", FakeClient)
+
+    sender = EvolutionApiHttpSender(
+        base_url="https://evolution-api.example.test",
+        instance_name="instance-id",
+        apikey="secret",
+        timeout=30,
+        delay_min_seconds=0,
+        delay_max_seconds=0,
+    )
+
+    sent = sender.send_text(
+        "59175034784@s.whatsapp.net",
+        "hola",
+        buttons=[Button(id="1", title="Buscar")],
+    )
+
+    assert sent is True
+    assert FakeClient.gets == ["https://evolution-api.example.test/instance/fetchInstances"]
+    assert [post["url"] for post in FakeClient.posts] == [
+        "https://evolution-api.example.test/message/sendText/instance-id",
+        "https://evolution-api.example.test/message/sendText/LozaBot%20II",
+    ]
+    assert FakeClient.posts[-1]["json"] == {
+        "number": "59175034784",
+        "text": "hola\n\nOpciones:\n1. Buscar",
+        "linkPreview": False,
+    }

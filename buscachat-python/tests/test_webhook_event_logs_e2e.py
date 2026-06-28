@@ -8,11 +8,9 @@ from sqlmodel import Session, delete, select
 from testcontainers.postgres import PostgresContainer
 
 from app.config import Settings, get_settings
-from app.database import run_migrations
-from app.database import get_session
+from app.database import get_session, run_migrations
 from app.models import WebhookEventLog
 from app.routers.whatsapp_evolution_api_webhook import router
-
 
 pytestmark = pytest.mark.e2e
 
@@ -71,6 +69,8 @@ def test_webhook_event_log_routes_capture_list_and_delete(postgres_url: str) -> 
     app.dependency_overrides[get_settings] = lambda: Settings(
         private_api_token="secret",
         evolution_api_webhook_apikey="evolution-secret",
+        evolution_api_send_enabled=False,
+        conversation_state_store="in_memory",
         face_matcher="stub",
         notifier="null",
     )
@@ -97,7 +97,17 @@ def test_webhook_event_log_routes_capture_list_and_delete(postgres_url: str) -> 
             },
         )
         assert capture_response.status_code == 200
-        log_id = capture_response.json()["log_id"]
+        capture_body = capture_response.json()
+        log_id = capture_body["log_id"]
+        assert capture_body["ignored"] is False
+        assert capture_body["chat_id"] == "59175034784@s.whatsapp.net"
+        assert capture_body["text"] == "BuscaChat - Bot de reunificacion familiar"
+        assert capture_body["buttons"] == [
+            {"id": "1", "title": "Buscar"},
+            {"id": "2", "title": "Registrar"},
+            {"id": "3", "title": "Ayuda"},
+        ]
+        assert capture_body["sent"] is False
 
         list_response = client.get("/whatsapp-evolution-api-webhook/logs")
         assert list_response.status_code == 200
