@@ -1,21 +1,16 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import create_engine, pool
+from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 from app import models  # noqa: F401
-from app.config import get_settings
 
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
-
-# Tomar la URL de .env vía app.config
-_settings = get_settings()
-config.set_main_option("sqlalchemy.url", _settings.database_url)
 
 target_metadata = SQLModel.metadata
 
@@ -57,8 +52,9 @@ def run_migrations_online() -> None:
             context.run_migrations()
         return
 
-    connectable = create_engine(
-        config.get_main_option("sqlalchemy.url"),
+    connectable = engine_from_config(
+        config.get_section(config.config_ini_section, {}),
+        prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
 
