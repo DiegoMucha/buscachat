@@ -127,10 +127,9 @@ def buscar_por_foto(
 ) -> SearchByPhotoResponse:
     """Compare the uploaded photo against all registered missing-person embeddings.
 
-    If a match is found above the configured threshold:
-    - The matched report is marked as ``found``.
-    - The original reporter is notified via WhatsApp (Green API).
-    - Returns ``{"found": true}``.
+    If a match is found above the configured threshold, the original reporter is
+    notified via WhatsApp (Green API) and ``{"found": true}`` is returned. The
+    matched report is only marked as found by the explicit confirmation flow.
 
     If no match is found, returns ``{"found": false}`` with no person data
     (by design: we do not expose any personal information on a miss).

@@ -34,20 +34,14 @@ def find_missing_person_by_name(session: Session, name: str) -> MissingPerson | 
 
 
 def find_missing_person_by_cedula(session: Session, cedula: str) -> MissingPerson | None:
-    """Busca una persona por cédula (búsqueda exacta o parcial)."""
     cleaned = cedula.strip()
     if not cleaned:
         return None
 
-    # Quitar prefijos comunes (V-, E-, v-, e-)
     digits = cleaned.upper().lstrip("VE-").strip()
-
-    # Buscar con o sin prefijo
     return _first(
         session,
-        select(MissingPerson).where(
-            MissingPerson.cedula_masked.ilike(f"%{digits}%")
-        ),
+        select(MissingPerson).where(MissingPerson.cedula_masked.ilike(f"%{digits}%")),
     )
 
 

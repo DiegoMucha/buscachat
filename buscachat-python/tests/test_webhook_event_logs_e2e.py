@@ -11,7 +11,7 @@ from app.config import Settings, get_settings
 from app.database import run_migrations
 from app.database import get_session
 from app.models import WebhookEventLog
-from app.routers.webhook import router
+from app.routers.whatsapp_evolution_api_webhook import router
 
 
 pytestmark = pytest.mark.e2e
@@ -34,8 +34,8 @@ def test_webhook_event_log_migration_supports_capture_list_and_delete(
     with Session(engine) as session:
         event_log = WebhookEventLog(
             method="POST",
-            url="https://example.test/whatsapp-webhook?source=n8n",
-            path="/whatsapp-webhook",
+            url="https://example.test/whatsapp-evolution-api-webhook?source=n8n",
+            path="/whatsapp-evolution-api-webhook",
             source_ip="203.0.113.10",
             headers={"content-type": "application/json"},
             query_params={"source": "n8n"},
@@ -68,21 +68,38 @@ def test_webhook_event_log_routes_capture_list_and_delete(postgres_url: str) -> 
             yield session
 
     app.dependency_overrides[get_session] = session_override
-    app.dependency_overrides[get_settings] = lambda: Settings(private_api_token="secret")
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        private_api_token="secret",
+        evolution_api_webhook_apikey="evolution-secret",
+        face_matcher="stub",
+        notifier="null",
+    )
 
     with TestClient(app) as client:
         capture_response = client.post(
-            "/whatsapp-webhook?source=n8n&source=meta",
+            "/whatsapp-evolution-api-webhook?source=n8n&source=meta",
             headers={
                 "x-forwarded-for": "203.0.113.20, 10.0.0.1",
                 "x-custom-event": "message",
             },
-            json={"entry": [{"id": "wa-test"}]},
+            json={
+                "data": {
+                    "key": {
+                        "id": "msg-1",
+                        "fromMe": False,
+                        "remoteJid": "59175034784@s.whatsapp.net",
+                    },
+                    "message": {"conversation": "hola"},
+                    "messageType": "conversation",
+                },
+                "apikey": "evolution-secret",
+                "event": "messages.upsert",
+            },
         )
         assert capture_response.status_code == 200
         log_id = capture_response.json()["log_id"]
 
-        list_response = client.get("/whatsapp-webhook/logs")
+        list_response = client.get("/whatsapp-evolution-api-webhook/logs")
         assert list_response.status_code == 200
         logs = list_response.json()
         assert len(logs) == 1
@@ -91,15 +108,16 @@ def test_webhook_event_log_routes_capture_list_and_delete(postgres_url: str) -> 
         assert logs[0]["source_ip"] == "203.0.113.20"
         assert logs[0]["headers"]["x-custom-event"] == "message"
         assert logs[0]["query_params"] == {"source": ["n8n", "meta"]}
-        assert logs[0]["body"] == {"entry": [{"id": "wa-test"}]}
+        assert logs[0]["body"]["apikey"] == "***redacted***"
+        assert logs[0]["body"]["data"]["key"]["remoteJid"] == "59175034784@s.whatsapp.net"
 
-        unauthenticated_delete = client.delete("/whatsapp-webhook/logs")
+        unauthenticated_delete = client.delete("/whatsapp-evolution-api-webhook/logs")
         assert unauthenticated_delete.status_code == 401
 
         delete_response = client.delete(
-            "/whatsapp-webhook/logs",
+            "/whatsapp-evolution-api-webhook/logs",
             headers={"x-api-token": "secret"},
         )
         assert delete_response.status_code == 200
         assert delete_response.json() == {"ok": True, "deleted": 1}
-        assert client.get("/whatsapp-webhook/logs").json() == []
+        assert client.get("/whatsapp-evolution-api-webhook/logs").json() == []

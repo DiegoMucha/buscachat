@@ -55,6 +55,7 @@ def register_missing_person(
     sender: str | None = None,
     reporter_name: str | None = None,
     conversation: Any | None = None,
+    face_embedding: list[float] | None = None,
 ) -> BotReport:
     """Register a missing person reported through the bot.
 
@@ -65,9 +66,11 @@ def register_missing_person(
     full_name = (datos.get("nombre") or "").strip() or "Desconocido"
     location = datos.get("ubicacion")
     photo_url = _photo_ref(datos, imagen_ref)
-    embedding = _embed_from_url(
-        matcher, photo_url, timeout=settings.image_download_timeout_seconds
-    )
+    embedding = face_embedding
+    if embedding is None:
+        embedding = _embed_from_url(
+            matcher, photo_url, timeout=settings.image_download_timeout_seconds
+        )
 
     external_id = uuid.uuid4().hex
     person = MissingPerson(
@@ -116,21 +119,20 @@ def search_by_photo(
     imagen_ref: str | None,
     searcher_chat_id: str | None = None,
     searcher_contact: str | None = None,
+    query_embedding: list[float] | None = None,
 ) -> BotReport | None:
     """Search registered reports by face.
 
     If a registered (``missing``) report matches the uploaded photo above the
-    configured threshold, notify the original reporter via the notifier and
-    return the matched report. Returns ``None`` when no photo, no detectable
-    face, or no match above the threshold.
-
-    The status is NOT changed automatically — the searcher must explicitly
-    confirm via the "Marcar como encontrada" action.
+    configured threshold, notify the original reporter and return the matched
+    report. The status is not changed automatically; callers should use
+    ``mark_missing_person_found`` after the searcher explicitly confirms.
     """
     photo_url = _photo_ref(datos, imagen_ref)
-    query_embedding = _embed_from_url(
-        matcher, photo_url, timeout=settings.image_download_timeout_seconds
-    )
+    if query_embedding is None:
+        query_embedding = _embed_from_url(
+            matcher, photo_url, timeout=settings.image_download_timeout_seconds
+        )
     if query_embedding is None:
         return None
 
@@ -177,19 +179,6 @@ def search_by_photo(
     ):
         return None
 
-    now = utc_now()
-    best_report.status = "found"
-    best_report.found_at = now
-    best_report.updated_at = now
-    session.add(best_report)
-
-    if best_report.missing_person_id is not None:
-        person = session.get(MissingPerson, best_report.missing_person_id)
-        if person is not None:
-            person.status = "found"
-            person.updated_at = now
-            session.add(person)
-
     _notify_reporter(
         notifier, best_report, searcher_contact or datos.get("contacto")
     )
@@ -227,3 +216,29 @@ def _notify_reporter(
 def search_by_name(session: Session, name: str) -> MissingPerson | None:
     """Search the database by name (reuses the existing search service)."""
     return find_missing_person_by_name(session, name)
+
+
+def mark_missing_person_found(session: Session, person_id: int) -> MissingPerson | None:
+    person = session.get(MissingPerson, person_id)
+    if person is None:
+        return None
+
+    now = utc_now()
+    if person.status != "found":
+        person.status = "found"
+        person.updated_at = now
+        session.add(person)
+
+    linked_reports = session.exec(
+        select(BotReport).where(BotReport.missing_person_id == person_id)
+    ).all()
+    for report in linked_reports:
+        if report.status != "found":
+            report.status = "found"
+            report.found_at = now
+            report.updated_at = now
+            session.add(report)
+
+    session.commit()
+    session.refresh(person)
+    return person
