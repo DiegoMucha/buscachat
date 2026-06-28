@@ -31,7 +31,7 @@ class FakeMissingPeopleAdapter:
 
 @pytest.fixture(scope="session")
 def postgres_url() -> Iterator[str]:
-    with PostgresContainer("postgres:18") as postgres:
+    with PostgresContainer("pgvector/pgvector:pg18") as postgres:
         yield postgres.get_connection_url().replace("postgresql+psycopg2://", "postgresql+psycopg://")
 
 

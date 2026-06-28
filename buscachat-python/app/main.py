@@ -13,6 +13,7 @@ from app.routers import bot as bot_router
 from app.routers import green_webhook as green_router
 from app.routers import meta_webhook as meta_router
 from app.scheduler import start_scheduler
+from app.security import require_private_token
 from app.services.search import find_missing_person_by_name
 
 
@@ -35,19 +36,10 @@ app.include_router(green_router.router)
 app.include_router(meta_router.router)
 
 
-def require_private_token(
-    x_api_token: Annotated[str | None, Header()] = None,
-    settings: Settings = Depends(get_settings),
-) -> None:
-    if x_api_token != settings.private_api_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API token",
-        )
-
-
 @app.get("/health/db")
-def database_health(session: Annotated[Session, Depends(get_session)]) -> dict[str, str]:
+def database_health(
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, str]:
     session.exec(text("SELECT 1"))
     return {"status": "ok"}
 
@@ -75,7 +67,9 @@ def list_missing_people(
         statement = statement.where(MissingPerson.source == source)
 
     statement = (
-        statement.order_by(MissingPerson.source_date.desc().nullslast(), MissingPerson.id.desc())
+        statement.order_by(
+            MissingPerson.source_date.desc().nullslast(), MissingPerson.id.desc()
+        )
         .offset(offset)
         .limit(limit)
     )

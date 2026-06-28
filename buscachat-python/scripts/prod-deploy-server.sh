@@ -3,8 +3,16 @@ set -euo pipefail
 
 APP_DIR="${APP_DIR:-$HOME/buscachat-venezuela}"
 SERVICE_NAME="${SERVICE_NAME:-buscachat-python}"
+ENV_FILE="${ENV_FILE:-$APP_DIR/buscachat-python/.env.production}"
 
 export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
 
 retry() {
   local attempts="$1"
