@@ -18,6 +18,8 @@ from app.database import get_session
 from app.face import FaceMatcher, get_face_matcher
 from app.models import MissingPerson
 from app.services import bot_intake
+from app.services.search import find_missing_person_by_cedula
+from app.utils.images import download_image
 
 router = APIRouter(prefix="/bot", tags=["bot"])
 
@@ -165,4 +167,47 @@ def buscar_por_nombre(
     """
     name = payload.datos.get("query") or payload.datos.get("nombre") or ""
     person = bot_intake.search_by_name(session, name) if name else None
+    return SearchByNameResponse(found=person is not None, person=person)
+
+
+@router.post(
+    "/buscar-cedula-foto",
+    response_model=SearchByNameResponse,
+    summary="Search for a missing person by OCR on a cedula photo",
+)
+def buscar_por_cedula_foto(
+    payload: BotContext,
+    session: Annotated[Session, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> SearchByNameResponse:
+    """Recibe una foto de cedula (via URL en ``imagen_ref``), extrae nombre y
+    cedula, y busca en la base de datos.
+
+    Busca primero por cedula. Si no encuentra, busca por nombre.
+    """
+    ocr_nombre: str | None = None
+    ocr_cedula: str | None = None
+
+    if payload.imagen_ref:
+        try:
+            image_bytes = download_image(
+                payload.imagen_ref, timeout=settings.image_download_timeout_seconds
+            )
+            from app.services.ocr_service import extract_from_id_image
+
+            data = extract_from_id_image(image_bytes)
+            ocr_nombre = data.get("nombre")
+            ocr_cedula = data.get("cedula")
+        except ImportError:
+            pass
+        except Exception:
+            pass
+
+    # Buscar: primero por cedula, luego por nombre
+    person: MissingPerson | None = None
+    if ocr_cedula:
+        person = find_missing_person_by_cedula(session, ocr_cedula)
+    if not person and ocr_nombre:
+        person = bot_intake.search_by_name(session, ocr_nombre)
+
     return SearchByNameResponse(found=person is not None, person=person)
