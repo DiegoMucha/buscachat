@@ -52,16 +52,16 @@ def test_register_and_search_by_photo(postgres_url: str, monkeypatch) -> None:
             matcher,
             settings,
             datos={
-                "nombre": "Maria Fernandez",
+                "nombre": "Alex Example Rivera",
                 "edad": "34",
-                "ubicacion": "Catia La Mar",
+                "ubicacion": "Sample District",
                 "descripcion": "Camisa azul",
-                "contacto": "+58 412 0000000",
+                "contacto": "+15550101003",
             },
-            imagen_ref="https://example.test/maria.jpg",
-            chat_id="58412111@c.us",
+            imagen_ref="https://example.test/alex-example.jpg",
+            chat_id="15551230000@c.us",
             channel="whatsapp",
-            sender="58412111",
+            sender="15551230000",
             reporter_name="Reporter",
             conversation=[{"role": "user", "text": "hola"}],
         )
@@ -75,7 +75,7 @@ def test_register_and_search_by_photo(postgres_url: str, monkeypatch) -> None:
         assert person is not None
         assert person.source == settings.bot_source
         assert person.status == "missing"
-        assert find_missing_person_by_name(session, "Maria Fernandez") == person
+        assert find_missing_person_by_name(session, "Alex Example Rivera") == person
 
     # Search with a non-matching photo -> nothing.
     with Session(engine) as session:
@@ -98,8 +98,8 @@ def test_register_and_search_by_photo(postgres_url: str, monkeypatch) -> None:
             matcher,
             notifier,
             settings,
-            datos={"contacto": "+58 414 9999999"},
-            imagen_ref="https://example.test/maria.jpg",
+            datos={"contacto": "+15550101004"},
+            imagen_ref="https://example.test/alex-example.jpg",
         )
         assert match is not None
         assert match.status == "missing"
@@ -116,6 +116,6 @@ def test_register_and_search_by_photo(postgres_url: str, monkeypatch) -> None:
 
     assert len(notifier.calls) == 1
     chat_id, message = notifier.calls[0]
-    assert chat_id == "58412111@c.us"
-    assert "Maria Fernandez" in message
-    assert "+58 414 9999999" in message
+    assert chat_id == "15551230000@c.us"
+    assert "Alex Example Rivera" in message
+    assert "+15550101004" in message

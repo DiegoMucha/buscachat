@@ -17,11 +17,11 @@ def _base_payload(message: dict, message_type: str = "conversation") -> dict:
             "key": {
                 "id": "3EB0EACEF7FB049A21BAC7",
                 "fromMe": False,
-                "remoteJid": "59175034784@s.whatsapp.net",
-                "remoteJidAlt": "59175034784@s.whatsapp.net",
+                "remoteJid": "15551234567@s.whatsapp.net",
+                "remoteJidAlt": "15551234567@s.whatsapp.net",
             },
             "message": message,
-            "pushName": "Sergio Loza",
+            "pushName": "Example Sender",
             "messageType": message_type,
         },
         "event": "messages.upsert",
@@ -56,10 +56,10 @@ def test_adapt_evolution_api_text_message_uses_remote_jid_as_sender() -> None:
     assert message is not None
     assert message.source == MessageSource.EVOLUTION_API
     assert message.kind == MessageKind.TEXT
-    assert message.sender_id == "59175034784@s.whatsapp.net"
-    assert message.chat_id == "59175034784@s.whatsapp.net"
+    assert message.sender_id == "15551234567@s.whatsapp.net"
+    assert message.chat_id == "15551234567@s.whatsapp.net"
     assert message.text == "hola bienvenido"
-    assert message.sender_name == "Sergio Loza"
+    assert message.sender_name == "Example Sender"
 
 
 def test_adapt_evolution_api_image_message_uses_media_url_and_caption() -> None:
@@ -138,7 +138,7 @@ def test_sender_resolves_instance_id_to_name_after_404(monkeypatch: pytest.Monke
     )
 
     sent = sender.send_text(
-        "59175034784@s.whatsapp.net",
+        "15551234567@s.whatsapp.net",
         "hola",
         buttons=[Button(id="1", title="Buscar")],
     )
@@ -150,7 +150,7 @@ def test_sender_resolves_instance_id_to_name_after_404(monkeypatch: pytest.Monke
         "https://evolution-api.example.test/message/sendText/LozaBot%20II",
     ]
     assert FakeClient.posts[-1]["json"] == {
-        "number": "59175034784",
+        "number": "15551234567",
         "text": "hola\n\nOpciones:\n1. Buscar",
         "linkPreview": False,
     }

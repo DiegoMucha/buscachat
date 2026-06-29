@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     private_api_token: str = "dev-hackathon-token"
 
     sos_venezuela_persons_url: str = "https://sosvenezuela2026.com/api/persons/list"
+    venezuela_te_busca_base_url: str = "https://venezuelatebusca.com"
+    venezuela_te_busca_timeout_seconds: float = 20.0
     missing_people_sync_enabled: bool = True
     missing_people_sync_run_on_startup: bool = True
     missing_people_sync_interval_hours: int = 2

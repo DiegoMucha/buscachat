@@ -49,22 +49,22 @@ def test_missing_people_sync_runs_migrations_and_upserts(postgres_url: str) -> N
                 MissingPersonPayload(
                     source="test-source",
                     external_id="person-1",
-                    full_name="Maria Fernandez",
+                    full_name="Alex Example Rivera",
                     status="missing",
                     raw_status="seeking_info",
-                    last_known_location="Catia La Mar",
+                    last_known_location="Sample District",
                     source_date=first_seen,
-                    raw_payload={"id": "person-1", "display_name": "Maria Fernandez"},
+                    raw_payload={"id": "person-1", "display_name": "Alex Example Rivera"},
                 ),
                 MissingPersonPayload(
                     source="test-source",
                     external_id="person-2",
-                    full_name="Jose Perez",
+                    full_name="Blair Example Morales",
                     status="found",
                     raw_status="found_alive",
-                    last_known_location="La Guaira",
+                    last_known_location="Demo Plaza",
                     source_date=first_seen,
-                    raw_payload={"id": "person-2", "display_name": "Jose Perez"},
+                    raw_payload={"id": "person-2", "display_name": "Blair Example Morales"},
                 ),
             ],
             [],
@@ -91,12 +91,12 @@ def test_missing_people_sync_runs_migrations_and_upserts(postgres_url: str) -> N
                 MissingPersonPayload(
                     source="test-source",
                     external_id="person-1",
-                    full_name="Maria Fernandez",
+                    full_name="Alex Example Rivera",
                     status="found",
                     raw_status="found_alive",
-                    last_known_location="Catia La Mar",
+                    last_known_location="Sample District",
                     source_date=updated_seen,
-                    raw_payload={"id": "person-1", "display_name": "Maria Fernandez"},
+                    raw_payload={"id": "person-1", "display_name": "Alex Example Rivera"},
                 )
             ],
             [],
@@ -130,6 +130,6 @@ def test_missing_people_sync_runs_migrations_and_upserts(postgres_url: str) -> N
         assert person_1.status == "found"
         assert person_1.source_date == updated_seen
 
-        assert find_missing_person_by_name(session, "Maria Fernandez") == person_1
-        assert find_missing_person_by_name(session, "Maria") == person_1
+        assert find_missing_person_by_name(session, "Alex Example Rivera") == person_1
+        assert find_missing_person_by_name(session, "Alex") == person_1
         assert find_missing_person_by_name(session, "No Existe") is None

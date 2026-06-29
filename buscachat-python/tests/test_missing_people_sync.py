@@ -50,8 +50,8 @@ def test_iter_missing_people_pages_uses_offsets_and_max_pages() -> None:
     payload = MissingPersonPayload(
         source="test-source",
         external_id="person-1",
-        full_name="Maria Fernandez",
-        raw_payload={"id": "person-1", "display_name": "Maria Fernandez"},
+        full_name="Alex Example Rivera",
+        raw_payload={"id": "person-1", "display_name": "Alex Example Rivera"},
     )
     adapter = FakeMissingPeopleAdapter([[payload], [payload], [payload]])
 
@@ -74,8 +74,8 @@ def test_sync_missing_people_throttles_between_page_fetches(monkeypatch: pytest.
     payload = MissingPersonPayload(
         source="test-source",
         external_id="person-1",
-        full_name="Maria Fernandez",
-        raw_payload={"id": "person-1", "display_name": "Maria Fernandez"},
+        full_name="Alex Example Rivera",
+        raw_payload={"id": "person-1", "display_name": "Alex Example Rivera"},
     )
     adapter = FakeMissingPeopleAdapter([[payload], [payload], []])
     session = FakeSession()
@@ -112,8 +112,8 @@ def test_sync_missing_people_does_not_throttle_when_disabled(monkeypatch: pytest
     payload = MissingPersonPayload(
         source="test-source",
         external_id="person-1",
-        full_name="Maria Fernandez",
-        raw_payload={"id": "person-1", "display_name": "Maria Fernandez"},
+        full_name="Alex Example Rivera",
+        raw_payload={"id": "person-1", "display_name": "Alex Example Rivera"},
     )
     adapter = FakeMissingPeopleAdapter([[payload], []])
     sleep_delays: list[float] = []

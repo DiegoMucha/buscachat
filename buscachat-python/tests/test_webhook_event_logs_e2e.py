@@ -87,7 +87,7 @@ def test_webhook_event_log_routes_capture_list_and_delete(postgres_url: str) -> 
                     "key": {
                         "id": "msg-1",
                         "fromMe": False,
-                        "remoteJid": "59175034784@s.whatsapp.net",
+                        "remoteJid": "15551234567@s.whatsapp.net",
                     },
                     "message": {"conversation": "hola"},
                     "messageType": "conversation",
@@ -100,8 +100,9 @@ def test_webhook_event_log_routes_capture_list_and_delete(postgres_url: str) -> 
         capture_body = capture_response.json()
         log_id = capture_body["log_id"]
         assert capture_body["ignored"] is False
-        assert capture_body["chat_id"] == "59175034784@s.whatsapp.net"
-        assert capture_body["text"] == "BuscaChat - Bot de reunificacion familiar"
+        assert capture_body["chat_id"] == "15551234567@s.whatsapp.net"
+        assert "BuscaChat" in capture_body["text"]
+        assert "Asistente de busqueda humanitaria" in capture_body["text"]
         assert capture_body["buttons"] == [
             {"id": "1", "title": "Buscar"},
             {"id": "2", "title": "Registrar"},
@@ -119,7 +120,7 @@ def test_webhook_event_log_routes_capture_list_and_delete(postgres_url: str) -> 
         assert logs[0]["headers"]["x-custom-event"] == "message"
         assert logs[0]["query_params"] == {"source": ["n8n", "meta"]}
         assert logs[0]["body"]["apikey"] == "***redacted***"
-        assert logs[0]["body"]["data"]["key"]["remoteJid"] == "59175034784@s.whatsapp.net"
+        assert logs[0]["body"]["data"]["key"]["remoteJid"] == "15551234567@s.whatsapp.net"
 
         unauthenticated_delete = client.delete("/whatsapp-evolution-api-webhook/logs")
         assert unauthenticated_delete.status_code == 401
