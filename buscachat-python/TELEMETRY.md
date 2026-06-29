@@ -49,6 +49,20 @@ sudo systemctl restart buscachat-python
 sudo systemctl status buscachat-python --no-pager
 ```
 
+For non-interactive deploys, the deploy user needs passwordless sudo for the
+systemctl commands used by `scripts/prod-deploy-server.sh`. Add or update a
+sudoers drop-in on the production server:
+
+```bash
+sudo visudo -f /etc/sudoers.d/buscachat-python
+```
+
+Use the user that runs the deploy. For the default `lozabot` user:
+
+```sudoers
+lozabot ALL=(root) NOPASSWD: /usr/bin/systemctl daemon-reload, /usr/bin/systemctl restart buscachat-python, /usr/bin/systemctl is-active --quiet buscachat-python
+```
+
 The systemd unit starts the app through OpenTelemetry:
 
 ```bash
