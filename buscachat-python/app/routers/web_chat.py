@@ -80,6 +80,15 @@ def web_chat_webhook(
         )
 
     inbound = adapt_web_message(payload.model_dump())
+
+    # Si hay URL de imagen, descargarla para OCR
+    if inbound.image_ref and inbound.kind == MessageKind.IMAGE:
+        try:
+            from app.utils.images import download_image
+            inbound.image_bytes = download_image(inbound.image_ref, timeout=settings.image_download_timeout_seconds)
+        except Exception:
+            pass  # No bloquea el flujo si falla
+
     user_message = web_chat_store.add_user_message(inbound)
     outbound = run_message_pipeline(
         inbound,

@@ -143,12 +143,21 @@ async def whatsapp_meta_webhook(
                 settings,
             )
             return Response(content="ok", media_type="text/plain")
-        message.image_embedding = matcher.embed(image_bytes)
-        save_embedding_for_chat(
-            message.chat_id,
-            message.image_embedding,
-            conversation_store,
-        )
+        message.image_bytes = image_bytes
+        # Solo generar embedding si el estado indica que se necesita (registro o busqueda facial)
+        state = conversation_store.get_state(message.chat_id) if conversation_store else {}
+        paso = state.get("paso", "") if state else ""
+        if paso in ("reg_foto", "buscar_foto"):
+            try:
+                message.image_embedding = matcher.embed(image_bytes)
+                if message.image_embedding:
+                    save_embedding_for_chat(
+                        message.chat_id,
+                        message.image_embedding,
+                        conversation_store,
+                    )
+            except Exception:
+                log.debug("Face embedding skipped (no insightface or no face detected)")
 
     outbound = run_message_pipeline(
         message,

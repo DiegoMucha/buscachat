@@ -31,6 +31,11 @@ face = [
     "numpy>=1.26.0",
     "opencv-python-headless>=4.9.0",
 ]
+# Optional OCR for scanning cedulas (PaddleOCR)
+ocr = [
+    "paddlepaddle>=2.6.0",
+    "paddleocr>=2.7.0",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

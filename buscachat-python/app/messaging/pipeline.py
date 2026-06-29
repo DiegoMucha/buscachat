@@ -137,6 +137,21 @@ def run_message_pipeline(
             conversation_store,
         )
 
+    if action == "buscar_por_ocr":
+        nombre = datos.get("nombre_ocr")
+        cedula = datos.get("cedula_ocr")
+        # Buscar primero por cédula, si no por nombre
+        person = None
+        if cedula:
+            person = find_missing_person_by_cedula(session, cedula)
+        if not person and nombre:
+            person = bot_intake.search_by_name(session, nombre)
+        return _search_person_response(
+            message, session, chat_id, action, person,
+            f"No se encontro a la persona de la cedula.",
+            conversation_store,
+        )
+
     if action == "marcar_encontrado":
         person_id = datos.get("person_id")
         person = bot_intake.mark_missing_person_found(session, int(person_id)) if person_id else None
