@@ -20,7 +20,7 @@ from app.adapters.green_api import Notifier
 from app.config import Settings
 from app.face.base import FaceMatcher, cosine_similarity
 from app.models import BotReport, MissingPerson, utc_now
-from app.services.search import find_missing_person_by_name
+from app.services.search import find_missing_people_by_name, find_missing_person_by_name
 from app.utils.images import download_image
 
 log = logging.getLogger(__name__)
@@ -30,9 +30,7 @@ def _photo_ref(datos: Mapping[str, Any], imagen_ref: str | None) -> str | None:
     return imagen_ref or datos.get("foto_ref") or datos.get("foto") or None
 
 
-def _embed_from_url(
-    matcher: FaceMatcher, url: str | None, *, timeout: float
-) -> list[float] | None:
+def _embed_from_url(matcher: FaceMatcher, url: str | None, *, timeout: float) -> list[float] | None:
     if not url:
         return None
     try:
@@ -68,9 +66,7 @@ def register_missing_person(
     photo_url = _photo_ref(datos, imagen_ref)
     embedding = face_embedding
     if embedding is None:
-        embedding = _embed_from_url(
-            matcher, photo_url, timeout=settings.image_download_timeout_seconds
-        )
+        embedding = _embed_from_url(matcher, photo_url, timeout=settings.image_download_timeout_seconds)
 
     external_id = uuid.uuid4().hex
     person = MissingPerson(
@@ -130,9 +126,7 @@ def search_by_photo(
     """
     photo_url = _photo_ref(datos, imagen_ref)
     if query_embedding is None:
-        query_embedding = _embed_from_url(
-            matcher, photo_url, timeout=settings.image_download_timeout_seconds
-        )
+        query_embedding = _embed_from_url(matcher, photo_url, timeout=settings.image_download_timeout_seconds)
     if query_embedding is None:
         return None
 
@@ -146,23 +140,16 @@ def search_by_photo(
     if best_report is None:
         return None
 
-    if (
-        cosine_similarity(query_embedding, list(best_report.face_embedding))
-        < settings.face_match_threshold
-    ):
+    if cosine_similarity(query_embedding, list(best_report.face_embedding)) < settings.face_match_threshold:
         return None
 
-    _notify_reporter(
-        notifier, best_report, searcher_contact or datos.get("contacto")
-    )
+    _notify_reporter(notifier, best_report, searcher_contact or datos.get("contacto"))
     session.commit()
     session.refresh(best_report)
     return best_report
 
 
-def _notify_reporter(
-    notifier: Notifier, report: BotReport, searcher_contact: str | None
-) -> None:
+def _notify_reporter(notifier: Notifier, report: BotReport, searcher_contact: str | None) -> None:
     """Notify the original reporter that their person was found."""
     if report.channel != "whatsapp":
         log.info(
@@ -172,9 +159,7 @@ def _notify_reporter(
         )
         return
 
-    message = (
-        f"¡Buenas noticias! {report.full_name} fue reportada como encontrada."
-    )
+    message = f"¡Buenas noticias! {report.full_name} fue reportada como encontrada."
     if searcher_contact:
         message += f"\nContacto de quien la encontró: {searcher_contact}"
 
@@ -190,6 +175,16 @@ def search_by_name(session: Session, name: str) -> MissingPerson | None:
     return find_missing_person_by_name(session, name)
 
 
+def search_by_name_matches(
+    session: Session,
+    name: str,
+    *,
+    limit: int = 10,
+) -> list[MissingPerson]:
+    """Search the database by name and return up to ``limit`` matches."""
+    return find_missing_people_by_name(session, name, limit=limit)
+
+
 def mark_missing_person_found(session: Session, person_id: int) -> MissingPerson | None:
     person = session.get(MissingPerson, person_id)
     if person is None:
@@ -201,9 +196,7 @@ def mark_missing_person_found(session: Session, person_id: int) -> MissingPerson
         person.updated_at = now
         session.add(person)
 
-    linked_reports = session.exec(
-        select(BotReport).where(BotReport.missing_person_id == person_id)
-    ).all()
+    linked_reports = session.exec(select(BotReport).where(BotReport.missing_person_id == person_id)).all()
     for report in linked_reports:
         if report.status != "found":
             report.status = "found"

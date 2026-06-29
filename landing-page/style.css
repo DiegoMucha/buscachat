@@ -268,17 +268,43 @@ header.scrolled {
 .logo {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-family: var(--font-headings);
-  font-size: 1.35rem;
-  font-weight: 800;
-  color: var(--text-primary);
   text-decoration: none;
+  transition: opacity var(--transition-fast);
 }
 
-.logo svg {
-  color: var(--primary);
-  filter: drop-shadow(0 0 8px rgba(6, 182, 212, 0.4));
+.logo:hover {
+  opacity: 0.85;
+}
+
+.logo-svg {
+  height: 48px;
+  width: auto;
+  display: block;
+  filter: drop-shadow(0 2px 12px rgba(6, 182, 212, 0.15));
+  transition: transform var(--transition-normal);
+}
+
+.logo:hover .logo-svg {
+  transform: scale(1.025);
+}
+
+.footer-logo .logo-svg {
+  height: 40px;
+}
+
+.logo-img {
+  height: 48px;
+  width: auto;
+  display: block;
+  transition: transform var(--transition-normal);
+}
+
+.logo:hover .logo-img {
+  transform: scale(1.025);
+}
+
+.footer-logo .logo-img {
+  height: 40px;
 }
 
 .badge-info {
@@ -436,6 +462,41 @@ header.scrolled {
   .step-card {
     padding: 32px 24px;
   }
+}
+
+/* ==========================================================================
+   BRAND BANNER SECTION
+   ========================================================================== */
+.brand-banner-section {
+  padding: 40px 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.banner-wrapper {
+  width: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-xl), 0 20px 40px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background-color: var(--bg-deep);
+  transition: border-color var(--transition-normal);
+}
+
+.banner-wrapper:hover {
+  border-color: var(--primary);
+}
+
+.brand-banner-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+  transition: transform var(--transition-slow);
+}
+
+.banner-wrapper:hover .brand-banner-img {
+  transform: scale(1.012);
 }
 
 /* ==========================================================================
@@ -810,13 +871,22 @@ footer {
 .flag-co .stripe-blue { background-color: #002f6c; height: 25%; width: 100%; }
 .flag-co .stripe-red { background-color: #ef4444; height: 25%; width: 100%; }
 
-/* Mexico flag styling */
-.flag-mx {
+/* Ecuador flag styling */
+.flag-ec .stripe-yellow { background-color: #fcd34d; height: 50%; width: 100%; }
+.flag-ec .stripe-blue { background-color: #002f6c; height: 25%; width: 100%; }
+.flag-ec .stripe-red { background-color: #ef4444; height: 25%; width: 100%; }
+
+/* Bolivia flag styling */
+.flag-bo .stripe-red { background-color: #ef4444; height: 33.33%; width: 100%; }
+.flag-bo .stripe-yellow { background-color: #fcd34d; height: 33.33%; width: 100%; }
+.flag-bo .stripe-green { background-color: #006847; height: 33.34%; width: 100%; }
+
+/* Peru flag styling */
+.flag-pe {
   flex-direction: row;
 }
-.flag-mx .col-green { background-color: #006847; width: 33.33%; height: 100%; }
-.flag-mx .col-white { background-color: #ffffff; width: 33.33%; height: 100%; }
-.flag-mx .col-red { background-color: #c8102e; width: 33.34%; height: 100%; }
+.flag-pe .col-red { background-color: #ef4444; width: 33.33%; height: 100%; }
+.flag-pe .col-white { background-color: #ffffff; width: 33.34%; height: 100%; }
 
 @media (max-width: 900px) {
   .footer-meta {

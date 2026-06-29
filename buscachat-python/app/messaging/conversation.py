@@ -1,9 +1,7 @@
 from typing import Any
 
-from app.messaging.session_store import (
-    ConversationStateStore,
-    get_default_conversation_state_store,
-)
+from app.messaging.session_store import (ConversationStateStore,
+                                         get_default_conversation_state_store)
 
 
 def _store(store: ConversationStateStore | None = None) -> ConversationStateStore:
@@ -55,8 +53,15 @@ def menu_response(chat_id: str, canal: str) -> dict[str, Any]:
     return make_response(
         chat_id,
         canal,
-        "BuscaChat - Bot de reunificacion familiar",
-        buttons=[("1", "Buscar"), ("2", "Registrar")],
+        (
+            "🤖 *BuscaChat* - Asistente de busqueda humanitaria\n\n"
+            "Enviame un mensaje para obtener informacion sobre personas localizadas, "
+            "desaparecidas o fuentes de informacion disponibles.\n\n"
+            "Puedo ayudarte a:\n"
+            "Responde con el numero de la opcion."
+            "para volver al inicio."
+        ),
+        buttons=[("1", "Buscar"), ("2", "Registrar"), ("3", "Ayuda")],
     )
 
 
@@ -124,19 +129,42 @@ def _handle_menu(
     if text == "1":
         set_conversation_state(chat_id, {"paso": "buscar_modo"}, store)
         return make_response(
-            chat_id, canal, "Como queres buscar?",
-            buttons=[("1", "Por foto"), ("2", "Por nombre"), ("3", "Por cedula")],
+            chat_id,
+            canal,
+            (
+                "🔎 *Busqueda de persona*\n\n"
+                "Elige como quieres buscar. Si tienes una foto clara del rostro, la busqueda "
+                "por foto puede ayudar a encontrar coincidencias. Si no, tambien puedes buscar "
+                "por nombre o cedula."
+            ),
+            buttons=[
+                ("1", "Por foto"),
+                ("2", "Por nombre"),
+                ("3", "Por cedula"),
+            ],
         )
     if text == "2":
         set_conversation_state(chat_id, {"paso": "reg_nombre"}, store)
         return make_response(
-            chat_id, canal, "Escribe el *nombre completo* de la persona desaparecida:"
+            chat_id,
+            canal,
+            "📝 *Registrar persona desaparecida*\n\nEscribe el *nombre completo* de la persona.",
         )
     if text == "3":
         return make_response(
-            chat_id, canal,
-            "BuscaChat te ayuda a encontrar personas desaparecidas. Escribe *menu* para volver.",
-
+            chat_id,
+            canal,
+            (
+                "ℹ️ *Ayuda*\n\n"
+                "BuscaChat te ayuda a consultar informacion sobre personas localizadas, "
+                "desaparecidas o reportadas por fuentes de informacion.\n\n"
+                "• Para buscar, puedes usar una foto, un nombre o una cedula.\n"
+                "• Para registrar un caso, te pedire nombre, edad aproximada, ubicacion, "
+                "descripcion, foto y contacto.\n"
+                "• La informacion compartida debe usarse con cuidado y solo para apoyar la "
+                "localizacion de personas.\n\n"
+                "Escribe *menu* para volver al inicio."
+            ),
         )
     # Ayuda por texto libre
     return make_response(
@@ -162,11 +190,15 @@ def _handle_buscar_modo(
         )
     if text == "2":
         set_conversation_state(chat_id, {"paso": "buscar_nombre"}, store)
-        return make_response(chat_id, canal, "Escribe el *nombre* de la persona que buscas:")
+        return make_response(
+            chat_id,
+            canal,
+            "Escribe el *nombre o parte del nombre* de la persona que buscas:",
+        )
     if text == "3":
         set_conversation_state(chat_id, {"paso": "buscar_cedula"}, store)
         return make_response(chat_id, canal, "Escribe el numero de *cedula* de la persona que buscas:")
-    return make_response(chat_id, canal, "Usa los botones: *1* foto, *2* nombre, *3* cedula")
+    return make_response(chat_id, canal, "Responde *1* por foto, *2* por nombre o *3* por cedula.")
 
 
 def _handle_buscar_modo_foto(
@@ -175,11 +207,11 @@ def _handle_buscar_modo_foto(
     text: str,
     store: ConversationStateStore | None,
 ) -> dict[str, Any]:
-    """Sub-menú de búsqueda por foto: persona (facial) o cédula (OCR)."""
+    """Sub-menu de busqueda por foto: persona (facial) o cedula (OCR)."""
     canal = msg["canal"]
     if text == "1":
         set_conversation_state(chat_id, {"paso": "buscar_foto"}, store)
-        return make_response(chat_id, canal, "Enviame la *foto* de la persona que buscas.")
+        return make_response(chat_id, canal, "Enviame una *foto clara del rostro* de la persona que buscas. 📷")
     if text == "2":
         set_conversation_state(chat_id, {"paso": "buscar_ocr"}, store)
         return make_response(chat_id, canal, "Envia una *foto de la cedula* para buscar automaticamente.")
@@ -321,7 +353,7 @@ def _handle_reg_nombre(
     set_conversation_state(chat_id, {"paso": "reg_cedula_ocr", "nombre": nombre}, store)
     return make_response(
         chat_id, canal,
-        f"Tenes una foto de la cedula de *{nombre}*? Enviala para rellenar los datos automaticamente, o escribe *no* para continuar manualmente."
+        f"Tenes una foto de la cedula de *{nombre}*? Enviala para rellenar los datos automaticamente, o escribe *no* para continuar manualmente.",
     )
 
 
@@ -338,7 +370,7 @@ def _handle_reg_cedula_ocr(
     if text in ("no", "omitir", "n", "no tengo", "ns"):
         state["paso"] = "reg_edad"
         set_conversation_state(chat_id, state, store)
-        return make_response(chat_id, canal, f"Ok. Que edad tiene *{state['nombre']}*? (escribe *omitir* si no sabes)")
+        return make_response(chat_id, canal, f"Ok. Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")
 
     if msg.get("imagen_ref") and msg.get("_image_bytes"):
         try:
@@ -367,7 +399,7 @@ def _handle_reg_cedula_ocr(
 
     state["paso"] = "reg_edad"
     set_conversation_state(chat_id, state, store)
-    return make_response(chat_id, canal, f"Que edad tiene *{state['nombre']}*? (escribe *omitir* si no sabes)")
+    return make_response(chat_id, canal, f"Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")
 
 
 def _handle_reg_ocr_confirmar(
@@ -381,15 +413,13 @@ def _handle_reg_ocr_confirmar(
     state = get_conversation_state(chat_id, store)
 
     if text in ("si", "yes", "ok"):
-        # Datos confirmados, saltar a ubicacion (ya tenemos nombre y cedula)
         state["paso"] = "reg_ubicacion"
         set_conversation_state(chat_id, state, store)
         return make_response(chat_id, canal, f"Donde fue vista por ultima vez *{state['nombre']}*? (municipio, parroquia, hospital...)")
     else:
-        # Rechazado, continuar manual desde edad
         state["paso"] = "reg_edad"
         set_conversation_state(chat_id, state, store)
-        return make_response(chat_id, canal, f"Ok, empecemos de nuevo. Que edad tiene *{state['nombre']}*? (escribe *omitir* si no sabes)")
+        return make_response(chat_id, canal, f"Ok, empecemos de nuevo. Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")
 
 
 def _handle_reg_edad(
@@ -403,7 +433,11 @@ def _handle_reg_edad(
     state["edad"] = None if text in ("omitir", "no se", "no sé", "ns") else text
     state["paso"] = "reg_cedula"
     set_conversation_state(chat_id, state, store)
-    return make_response(chat_id, canal, f"Tenes el numero de cedula de *{state['nombre']}*? (responde *omitir* si no)")
+    return make_response(
+        chat_id,
+        canal,
+        f"¿Tienes el numero de cedula de *{state['nombre']}*? Responde *omitir* si no lo tienes.",
+    )
 
 
 def _handle_reg_cedula(
@@ -417,7 +451,11 @@ def _handle_reg_cedula(
     state["cedula"] = None if text in ("omitir", "no", "no se", "no sé", "ns") else text
     state["paso"] = "reg_ubicacion"
     set_conversation_state(chat_id, state, store)
-    return make_response(chat_id, canal, f"Donde fue vista por ultima vez *{state['nombre']}*?")
+    return make_response(
+        chat_id,
+        canal,
+        f"¿Donde fue vista por ultima vez *{state['nombre']}*? Puedes incluir zona, calle, hospital o referencia.",
+    )
 
 
 def _handle_reg_ubicacion(
@@ -435,8 +473,9 @@ def _handle_reg_ubicacion(
         chat_id,
         canal,
         (
-            f"Como podrias describir a *{state['nombre']}*? "
-            "(ropa, estatura, senas particulares... escribe *omitir* para saltar)"
+            f"¿Como podrias describir a *{state['nombre']}*? "
+            "Incluye ropa, estatura, señas particulares o informacion relevante. "
+            "Escribe *omitir* para saltar."
         ),
     )
 
@@ -452,7 +491,11 @@ def _handle_reg_descripcion(
     state["descripcion"] = None if text in ("omitir", "no", "ns") else msg.get("text", "").strip()
     state["paso"] = "reg_foto"
     set_conversation_state(chat_id, state, store)
-    return make_response(chat_id, canal, f"Enviame una *foto* de *{state['nombre']}*. (escribe *omitir* si no tenes)")
+    return make_response(
+        chat_id,
+        canal,
+        f"Enviame una *foto clara* de *{state['nombre']}*. Escribe *omitir* si no tienes una.",
+    )
 
 
 def _handle_reg_foto(
@@ -472,7 +515,7 @@ def _handle_reg_foto(
         return make_response(
             chat_id,
             canal,
-            f"Como podemos contactar a quien reporta a *{state['nombre']}*? (telefono)",
+            f"¿Como podemos contactar a quien reporta a *{state['nombre']}*? Indica telefono u otro contacto.",
         )
 
     if msg.get("imagen_ref"):
@@ -484,10 +527,14 @@ def _handle_reg_foto(
         return make_response(
             chat_id,
             canal,
-            f"Foto recibida. Como podemos contactar a quien reporta a *{state['nombre']}*? (telefono)",
+            (
+                "✅ Foto recibida.\n\n"
+                f"¿Como podemos contactar a quien reporta a *{state['nombre']}*? "
+                "Indica telefono u otro contacto."
+            ),
         )
 
-    return make_response(chat_id, canal, "Por favor envia una foto o escribe *omitir*.")
+    return make_response(chat_id, canal, "Por favor envia una foto como imagen 📷 o escribe *omitir*.")
 
 
 def _handle_reg_contacto(
@@ -503,19 +550,20 @@ def _handle_reg_contacto(
     state["paso"] = "reg_confirmar"
     set_conversation_state(chat_id, state, store)
 
-    resumen = f"*{state['nombre']}*"
+    resumen = f"Revisa la informacion antes de guardar:\n\n👤 Nombre: *{state['nombre']}*"
     if state.get("edad"):
-        resumen += f"\nEdad: {state['edad']}"
+        resumen += f"\n🎂 Edad aproximada: {state['edad']}"
     if state.get("cedula"):
-        resumen += f"\nCedula: {state['cedula']}"
+        resumen += f"\n🪪 Cedula: {state['cedula']}"
     if state.get("ubicacion"):
-        resumen += f"\nUbicacion: {state['ubicacion']}"
+        resumen += f"\n📍 Ultima ubicacion: {state['ubicacion']}"
     if state.get("descripcion"):
-        resumen += f"\nDescripcion: {state['descripcion']}"
+        resumen += f"\n📝 Descripcion: {state['descripcion']}"
     if state.get("imagen_ref"):
-        resumen += "\nFoto: recibida"
+        resumen += "\n🖼 Foto: recibida"
     if contacto:
-        resumen += f"\nContacto: {contacto}"
+        resumen += f"\n📞 Contacto: {contacto}"
+    resumen += "\n\n¿Confirmas el registro?"
 
     return make_response(chat_id, canal, resumen, buttons=[("si", "Confirmar"), ("no", "Cancelar")])
 

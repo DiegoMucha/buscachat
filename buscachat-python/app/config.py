@@ -52,7 +52,9 @@ class Settings(BaseSettings):
     evolution_api_send_delay_max_seconds: float = 6.0
 
     # Meta WhatsApp Cloud API
+    meta_graph_api_version: str = "v25.0"
     meta_verify_token: str = ""
+    meta_app_secret: str = ""
     meta_access_token: str = ""
     meta_phone_number_id: str = ""
 
