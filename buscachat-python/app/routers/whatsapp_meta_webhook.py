@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import json
 import logging
 from typing import Annotated, Any
 
@@ -28,8 +31,27 @@ router = APIRouter(
 )
 
 
+def _verify_meta_signature(
+    raw_body: bytes,
+    signature_header: str | None,
+    app_secret: str,
+) -> bool:
+    if not app_secret:
+        return True
+    if not signature_header or not signature_header.startswith("sha256="):
+        return False
+
+    expected_signature = hmac.new(
+        app_secret.encode("utf-8"),
+        raw_body,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(signature_header, f"sha256={expected_signature}")
+
+
 def _download_meta_image(
     media_id: str,
+    graph_api_version: str,
     access_token: str,
     *,
     timeout: float = 30.0,
@@ -37,7 +59,7 @@ def _download_meta_image(
     try:
         with httpx.Client(timeout=timeout) as client:
             url_response = client.get(
-                f"https://graph.facebook.com/v19.0/{media_id}",
+                f"https://graph.facebook.com/{graph_api_version}/{media_id}",
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             url_response.raise_for_status()
@@ -93,7 +115,7 @@ def _send_meta_message(
     try:
         with httpx.Client(timeout=15.0) as client:
             response = client.post(
-                f"https://graph.facebook.com/v19.0/{settings.meta_phone_number_id}/messages",
+                f"https://graph.facebook.com/{settings.meta_graph_api_version}/{settings.meta_phone_number_id}/messages",
                 headers={
                     "Authorization": f"Bearer {settings.meta_access_token}",
                     "Content-Type": "application/json",
@@ -129,7 +151,21 @@ async def whatsapp_meta_webhook(
     ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Response:
-    body = await request.json()
+    raw_body = await request.body()
+    signature_header = request.headers.get("x-hub-signature-256")
+    if not _verify_meta_signature(
+        raw_body,
+        signature_header,
+        settings.meta_app_secret,
+    ):
+        log.warning("Rejected Meta webhook POST with invalid signature")
+        return Response(content="Invalid signature", status_code=403)
+
+    try:
+        body = json.loads(raw_body)
+    except json.JSONDecodeError:
+        return Response(content="Invalid JSON", status_code=400)
+
     message = adapt_meta_message(body)
     if message is None:
         return Response(content="ok", media_type="text/plain")
@@ -137,6 +173,7 @@ async def whatsapp_meta_webhook(
     if message.kind == MessageKind.IMAGE and message.image_ref and settings.meta_access_token:
         image_bytes = _download_meta_image(
             message.image_ref,
+            settings.meta_graph_api_version,
             settings.meta_access_token,
             timeout=settings.image_download_timeout_seconds,
         )

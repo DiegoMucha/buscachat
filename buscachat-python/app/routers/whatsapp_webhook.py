@@ -202,7 +202,13 @@ def _motor(msg: dict[str, Any]) -> dict[str, Any]:
     return _menu_respuesta(chat_id, msg["canal"])
 
 
-def _resp(chat_id: str, canal: str, text: str, accion: str | None = None, buttons: list[tuple[str, str]] | None = None) -> dict:
+def _resp(
+    chat_id: str,
+    canal: str,
+    text: str,
+    accion: str | None = None,
+    buttons: list[tuple[str, str]] | None = None,
+) -> dict:
     out: dict = {"chat_id": chat_id, "canal": canal, "respuesta": text, "accion": accion}
     if buttons:
         out["buttons"] = buttons
@@ -229,7 +235,8 @@ def _handle_menu(msg: dict, chat_id: str, text: str) -> dict:
     if text == "3":
         return _resp(
             chat_id, canal,
-            "BuscaChat te ayuda a encontrar personas desaparecidas tras el terremoto. Escribe *menu* para volver al inicio.",
+            "BuscaChat te ayuda a encontrar personas desaparecidas tras el terremoto. "
+            "Escribe *menu* para volver al inicio.",
         )
     # Saludo o texto cualquiera → mostrar menú completo
     return _menu_respuesta(chat_id, canal)
@@ -302,7 +309,12 @@ def _handle_reg_cedula(msg: dict, chat_id: str, text: str) -> dict:
     state["cedula"] = cedula
     state["paso"] = "reg_ubicacion"
     _set_state(chat_id, state)
-    return _resp(chat_id, canal, f"¿Dónde fue vista por última vez *{state['nombre']}*? (municipio, parroquia, sector, hospital...)")
+    return _resp(
+        chat_id,
+        canal,
+        f"¿Dónde fue vista por última vez *{state['nombre']}*? "
+        "(municipio, parroquia, sector, hospital...)",
+    )
 
 
 def _handle_reg_ubicacion(msg: dict, chat_id: str, text: str) -> dict:
@@ -313,7 +325,12 @@ def _handle_reg_ubicacion(msg: dict, chat_id: str, text: str) -> dict:
     state["ubicacion"] = ubicacion
     state["paso"] = "reg_descripcion"
     _set_state(chat_id, state)
-    return _resp(chat_id, canal, f"¿Cómo podrías describir a *{state['nombre']}*? (ropa, estatura, señas particulares... escribe *omitir* si querés saltar)")
+    return _resp(
+        chat_id,
+        canal,
+        f"¿Cómo podrías describir a *{state['nombre']}*? "
+        "(ropa, estatura, señas particulares... escribe *omitir* si querés saltar)",
+    )
 
 
 def _handle_reg_descripcion(msg: dict, chat_id: str, text: str) -> dict:
@@ -324,7 +341,12 @@ def _handle_reg_descripcion(msg: dict, chat_id: str, text: str) -> dict:
     state["descripcion"] = desc
     state["paso"] = "reg_foto"
     _set_state(chat_id, state)
-    return _resp(chat_id, canal, f"📸 Enviame una *foto* de *{state['nombre']}* para ayudar a identificarla. (escribí *omitir* si no tenés)")
+    return _resp(
+        chat_id,
+        canal,
+        f"📸 Enviame una *foto* de *{state['nombre']}* para ayudar a identificarla. "
+        "(escribí *omitir* si no tenés)",
+    )
 
 
 def _handle_reg_foto(msg: dict, chat_id: str) -> dict:
@@ -338,14 +360,22 @@ def _handle_reg_foto(msg: dict, chat_id: str) -> dict:
         state["_embedding"] = None
         state["paso"] = "reg_contacto"
         _set_state(chat_id, state)
-        return _resp(chat_id, canal, f"¿Cómo podemos contactar a quien reporta a *{state['nombre']}*? (teléfono)")
+        return _resp(
+            chat_id,
+            canal,
+            f"¿Cómo podemos contactar a quien reporta a *{state['nombre']}*? (teléfono)",
+        )
 
     if msg.get("imagen_ref"):
         state["imagen_ref"] = msg["imagen_ref"]
         # El embedding lo setea el webhook después de generarlo
         state["paso"] = "reg_contacto"
         _set_state(chat_id, state)
-        return _resp(chat_id, canal, f"✅ Foto recibida. ¿Cómo podemos contactar a quien reporta a *{state['nombre']}*? (teléfono)")
+        return _resp(
+            chat_id,
+            canal,
+            f"✅ Foto recibida. ¿Cómo podemos contactar a quien reporta a *{state['nombre']}*? (teléfono)",
+        )
 
     return _resp(chat_id, canal, "Por favor enviá una foto o escribe *omitir*.")
 
@@ -565,13 +595,19 @@ def _extract_meta_message(body: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _download_meta_image(media_id: str, access_token: str, *, timeout: float = 30.0) -> bytes | None:
+def _download_meta_image(
+    media_id: str,
+    graph_api_version: str,
+    access_token: str,
+    *,
+    timeout: float = 30.0,
+) -> bytes | None:
     """Descarga una imagen de Meta usando su media ID."""
     try:
         with httpx.Client(timeout=timeout) as client:
             # 1. Obtener URL de descarga
             url_resp = client.get(
-                f"https://graph.facebook.com/v19.0/{media_id}",
+                f"https://graph.facebook.com/{graph_api_version}/{media_id}",
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             url_resp.raise_for_status()
@@ -630,7 +666,9 @@ async def meta_webhook(
     # Si es imagen, descargar bytes y generar embedding ya
     if msg["tipo"] == "imagen" and msg["imagen_ref"] and settings.meta_access_token:
         image_bytes = _download_meta_image(
-            msg["imagen_ref"], settings.meta_access_token,
+            msg["imagen_ref"],
+            settings.meta_graph_api_version,
+            settings.meta_access_token,
             timeout=settings.image_download_timeout_seconds,
         )
         if image_bytes:
@@ -732,7 +770,12 @@ async def meta_webhook(
     return Response(content="ok", media_type="text/plain")
 
 
-def _send_meta_message(chat_id: str, text: str, settings: Settings, buttons: list[tuple[str, str]] | None = None) -> None:
+def _send_meta_message(
+    chat_id: str,
+    text: str,
+    settings: Settings,
+    buttons: list[tuple[str, str]] | None = None,
+) -> None:
     """Envía un mensaje de texto (o con botones interactivos) vía Meta WhatsApp Cloud API."""
     if not settings.meta_access_token or not settings.meta_phone_number_id:
         log.warning("Meta credentials missing; not sending: %s → %s", chat_id, text[:80])
@@ -766,7 +809,7 @@ def _send_meta_message(chat_id: str, text: str, settings: Settings, buttons: lis
     try:
         with httpx.Client(timeout=15.0) as client:
             resp = client.post(
-                f"https://graph.facebook.com/v19.0/{settings.meta_phone_number_id}/messages",
+                f"https://graph.facebook.com/{settings.meta_graph_api_version}/{settings.meta_phone_number_id}/messages",
                 headers={
                     "Authorization": f"Bearer {settings.meta_access_token}",
                     "Content-Type": "application/json",
@@ -898,7 +941,6 @@ def _meta_search_by_embedding(
 
 def _format_person_info(report: Any) -> str:
     """Formatea la info completa de un BotReport para mostrarla al usuario."""
-    from app.models import MissingPerson
     parts = [f"✅ *{report.full_name}*"]
 
     if getattr(report, "age", None):

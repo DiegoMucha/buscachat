@@ -42,6 +42,11 @@ Documentacion interactiva:
 - Swagger UI: http://127.0.0.1:8000/docs
 - ReDoc: http://127.0.0.1:8000/redoc
 
+## Telemetria
+
+La configuracion de OpenTelemetry/Honeycomb para produccion esta en
+[`TELEMETRY.md`](TELEMETRY.md).
+
 ## Configuracion
 
 ```env

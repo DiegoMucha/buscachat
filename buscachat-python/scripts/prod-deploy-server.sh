@@ -47,6 +47,7 @@ cd "$APP_DIR/buscachat-python"
 retry 5 5 "$UV_BIN" sync --frozen --no-dev
 "$UV_BIN" run alembic upgrade head
 
+sudo /usr/bin/systemctl daemon-reload
 sudo /usr/bin/systemctl restart "$SERVICE_NAME"
 sudo /usr/bin/systemctl is-active --quiet "$SERVICE_NAME" || exit 1
 

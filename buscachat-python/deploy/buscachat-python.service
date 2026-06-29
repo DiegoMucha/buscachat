@@ -9,7 +9,7 @@ User=lozabot
 Group=lozabot
 WorkingDirectory=/home/lozabot/buscachat-venezuela/buscachat-python
 EnvironmentFile=/home/lozabot/buscachat-venezuela/buscachat-python/.env.production
-ExecStart=/home/lozabot/.local/bin/uv run python -m fastapi run main.py --host 127.0.0.1 --port 8000
+ExecStart=/home/lozabot/.local/bin/uv run opentelemetry-instrument python -m fastapi run main.py --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
 
