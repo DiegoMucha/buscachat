@@ -12,7 +12,9 @@ from app.messaging.dependencies import (
     get_face_matcher_dependency,
     get_notifier_dependency,
 )
-from app.routers.whatsapp_meta_webhook import _verify_meta_signature, router
+from app.messaging.types import Button
+from app.routers import whatsapp_meta_webhook
+from app.routers.whatsapp_meta_webhook import _send_meta_message, _verify_meta_signature, router
 
 
 def _app_with_meta_settings(settings: Settings) -> FastAPI:
@@ -86,9 +88,7 @@ def test_meta_signature_verification_is_disabled_without_app_secret() -> None:
 
 
 def test_meta_webhook_post_rejects_invalid_signature() -> None:
-    app = _app_with_meta_settings(
-        Settings(meta_verify_token="verify-me", meta_app_secret="app-secret")
-    )
+    app = _app_with_meta_settings(Settings(meta_verify_token="verify-me", meta_app_secret="app-secret"))
     client = TestClient(app)
 
     response = client.post(
@@ -105,13 +105,9 @@ def test_meta_webhook_post_rejects_invalid_signature() -> None:
 
 
 def test_meta_webhook_post_accepts_valid_signed_status_payload() -> None:
-    app = _app_with_meta_settings(
-        Settings(meta_verify_token="verify-me", meta_app_secret="app-secret")
-    )
+    app = _app_with_meta_settings(Settings(meta_verify_token="verify-me", meta_app_secret="app-secret"))
     client = TestClient(app)
-    raw_body = json.dumps({"entry": [{"changes": [{"value": {"statuses": []}}]}]}).encode(
-        "utf-8"
-    )
+    raw_body = json.dumps({"entry": [{"changes": [{"value": {"statuses": []}}]}]}).encode("utf-8")
 
     response = client.post(
         "/whatsapp-meta-webhook",
@@ -124,3 +120,44 @@ def test_meta_webhook_post_accepts_valid_signed_status_payload() -> None:
 
     assert response.status_code == 200
     assert response.text == "ok"
+
+
+def test_meta_sender_splits_long_text_before_sending_buttons(monkeypatch) -> None:
+    sent_payloads = []
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def post(self, url, headers, json):
+            sent_payloads.append(json)
+            return FakeResponse()
+
+    monkeypatch.setattr(whatsapp_meta_webhook.httpx, "Client", FakeClient)
+
+    _send_meta_message(
+        "59170000000",
+        "Resultado\n" + ("Juan Perez encontrado\n" * 80),
+        Settings(meta_access_token="token", meta_phone_number_id="phone-id"),
+        buttons=[Button(id="menu", title="Menu")],
+    )
+
+    assert len(sent_payloads) == 2
+    assert "type" not in sent_payloads[0]
+    assert "Juan Perez encontrado" in sent_payloads[0]["text"]["body"]
+    assert sent_payloads[1]["type"] == "interactive"
+    assert sent_payloads[1]["interactive"]["body"]["text"] == "Elige una opcion:"
+    assert sent_payloads[1]["interactive"]["action"]["buttons"][0]["reply"] == {
+        "id": "menu",
+        "title": "Menu",
+    }

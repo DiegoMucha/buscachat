@@ -25,6 +25,10 @@ from app.messaging.types import Button, MessageKind
 
 log = logging.getLogger(__name__)
 
+META_TEXT_BODY_LIMIT = 4096
+META_INTERACTIVE_BODY_LIMIT = 1024
+META_BUTTON_PROMPT = "Elige una opcion:"
+
 router = APIRouter(
     prefix="/whatsapp-meta-webhook",
     tags=["whatsapp-meta-webhook"],
@@ -88,43 +92,88 @@ def _send_meta_message(
         log.warning("Meta credentials missing; not sending to %s", chat_id)
         return
 
+    payloads: list[dict[str, Any]]
     if buttons:
-        payload: dict[str, Any] = {
-            "messaging_product": "whatsapp",
-            "recipient_type": "individual",
-            "to": chat_id,
-            "type": "interactive",
-            "interactive": {
-                "type": "button",
-                "body": {"text": text},
-                "action": {
-                    "buttons": [
-                        {"type": "reply", "reply": {"id": button.id, "title": button.title}}
-                        for button in buttons[:3]
-                    ]
-                },
-            },
-        }
+        if len(text) > META_INTERACTIVE_BODY_LIMIT:
+            payloads = [_meta_text_payload(chat_id, chunk) for chunk in _split_meta_text(text)]
+            payloads.append(_meta_interactive_payload(chat_id, META_BUTTON_PROMPT, buttons))
+        else:
+            payloads = [_meta_interactive_payload(chat_id, text, buttons)]
     else:
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": chat_id,
-            "text": {"body": text},
-        }
+        payloads = [_meta_text_payload(chat_id, chunk) for chunk in _split_meta_text(text)]
 
     try:
         with httpx.Client(timeout=15.0) as client:
-            response = client.post(
-                f"https://graph.facebook.com/{settings.meta_graph_api_version}/{settings.meta_phone_number_id}/messages",
-                headers={
-                    "Authorization": f"Bearer {settings.meta_access_token}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-            )
-            response.raise_for_status()
+            for payload in payloads:
+                response = client.post(
+                    f"https://graph.facebook.com/{settings.meta_graph_api_version}/{settings.meta_phone_number_id}/messages",
+                    headers={
+                        "Authorization": f"Bearer {settings.meta_access_token}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                )
+                response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        response = exc.response
+        log.exception(
+            "Failed to send Meta message to %s: status=%s body=%s",
+            chat_id,
+            response.status_code,
+            response.text[:500],
+        )
     except Exception:
         log.exception("Failed to send Meta message to %s", chat_id)
+
+
+def _meta_text_payload(chat_id: str, text: str) -> dict[str, Any]:
+    return {
+        "messaging_product": "whatsapp",
+        "to": chat_id,
+        "text": {"body": text},
+    }
+
+
+def _meta_interactive_payload(chat_id: str, text: str, buttons: list[Button]) -> dict[str, Any]:
+    return {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": chat_id,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": text},
+            "action": {
+                "buttons": [
+                    {"type": "reply", "reply": {"id": button.id, "title": button.title}} for button in buttons[:3]
+                ]
+            },
+        },
+    }
+
+
+def _split_meta_text(text: str, limit: int = META_TEXT_BODY_LIMIT) -> list[str]:
+    clean_text = text.strip()
+    if not clean_text:
+        return [""]
+    if len(clean_text) <= limit:
+        return [clean_text]
+
+    chunks: list[str] = []
+    remaining = clean_text
+    while len(remaining) > limit:
+        split_at = max(
+            remaining.rfind("\n\n", 0, limit + 1),
+            remaining.rfind("\n", 0, limit + 1),
+            remaining.rfind(" ", 0, limit + 1),
+        )
+        if split_at <= 0:
+            split_at = limit
+        chunks.append(remaining[:split_at].rstrip())
+        remaining = remaining[split_at:].lstrip()
+    if remaining:
+        chunks.append(remaining)
+    return chunks
 
 
 @router.get("")
