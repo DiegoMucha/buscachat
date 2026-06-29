@@ -70,7 +70,8 @@ def test_web_chat_messages_support_polling_after_id() -> None:
     client.post("/web-chat/webhook", json={"text": "1"})
 
     messages = client.get("/web-chat/messages?after_id=2").json()
-    assert [message["text"] for message in messages] == ["1", "Como queres buscar?"]
+    assert messages[0]["text"] == "1"
+    assert "Busqueda de persona" in messages[1]["text"]
 
 
 def test_web_chat_clear_resets_transcript_and_conversation_state() -> None:

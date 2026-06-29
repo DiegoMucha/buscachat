@@ -105,7 +105,19 @@ def _send_meta_message(
         log.exception("Failed to send Meta message to %s", chat_id)
 
 
-@router.api_route("", methods=["GET", "POST"])
+@router.get("")
+async def verify_whatsapp_meta_webhook(
+    settings: Annotated[Settings, Depends(get_settings)],
+    hub_mode: Annotated[str | None, Query(alias="hub.mode")] = None,
+    hub_verify_token: Annotated[str | None, Query(alias="hub.verify_token")] = None,
+    hub_challenge: Annotated[str | None, Query(alias="hub.challenge")] = None,
+) -> Response:
+    if hub_mode == "subscribe" and hub_verify_token == settings.meta_verify_token:
+        return Response(content=str(hub_challenge or ""), media_type="text/plain")
+    return Response(content="Verification failed", status_code=403)
+
+
+@router.post("")
 async def whatsapp_meta_webhook(
     request: Request,
     session: Annotated[Session, Depends(get_session)],
@@ -116,15 +128,7 @@ async def whatsapp_meta_webhook(
         Depends(get_conversation_state_store_dependency),
     ],
     settings: Annotated[Settings, Depends(get_settings)],
-    hub_mode: Annotated[str | None, Query(alias="hub.mode")] = None,
-    hub_verify_token: Annotated[str | None, Query(alias="hub.verify_token")] = None,
-    hub_challenge: Annotated[str | None, Query(alias="hub.challenge")] = None,
 ) -> Response:
-    if request.method == "GET":
-        if hub_mode == "subscribe" and hub_verify_token == settings.meta_verify_token:
-            return Response(content=str(hub_challenge or ""), media_type="text/plain")
-        return Response(content="Verification failed", status_code=403)
-
     body = await request.json()
     message = adapt_meta_message(body)
     if message is None:
