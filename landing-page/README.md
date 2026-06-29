@@ -1,6 +1,6 @@
 # BuscaChat: Tecnología al Servicio de la Búsqueda Humanitaria
 
-**BuscaChat** es una iniciativa humanitaria, gratuita y sin fines de lucro diseñada para ayudar a localizar y reportar personas desaparecidas en **El Salvador, Venezuela, Colombia y México** a través de tecnología de reconocimiento facial integrada en chatbots de WhatsApp y Telegram.
+**BuscaChat** es una iniciativa humanitaria, gratuita y sin fines de lucro diseñada para ayudar a localizar y reportar personas desaparecidas en **El Salvador, Venezuela, Colombia, Ecuador, Bolivia y Perú** a través de tecnología de reconocimiento facial integrada en chatbots de WhatsApp y Telegram.
 
 Este repositorio contiene el código de la landing page oficial del proyecto, diseñada con una estética moderna, responsiva y de alta fidelidad visual para inspirar confianza y esperanza en las familias y rescatistas.
 
