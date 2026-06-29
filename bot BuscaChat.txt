@@ -1,0 +1,344 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// ============================================================================\n//  MOTOR CONVERSACIONAL DETERMINISTICO  (por opciones, multicanal)\n//  Casos de uso: 1) Buscar  2) Registrar  3) Ayuda\n//  El motor SOLO guia y recolecta. Las busquedas reales (reconocimiento\n//  facial / por nombre) son FUNCIONES futuras: el motor emite una `accion`\n//  al cerrar el flujo y otro nodo hara el llamado a la API/servicio.\n//  Maneja texto e imagen (entrada.tipo / entrada.imagen_ref).\n// ============================================================================\n\n// ---- 1. Entrada normalizada ----\nconst e = $('Extraer Mensaje1').item.json;\nconst textoRaw = (e.text || '').toString().trim();\nconst texto = textoRaw.toLowerCase();\nconst tipo = e.tipo || 'texto';            // 'texto' | 'imagen'\nconst imagenRef = e.imagen_ref || '';\nconst nombreUsuario = e.nombre || '';\nconst esImagen = tipo === 'imagen';\n\n// ---- 2. Sesion desde Redis: { paso, datos } ----\nlet sesion = { paso: 'menu', datos: {} };\nconst sesionRaw = $('Obtener Estado1').item.json.estado;\nif (sesionRaw) { try { sesion = JSON.parse(sesionRaw); } catch (x) {} }\nif (!sesion.paso) sesion.paso = 'menu';\nif (!sesion.datos) sesion.datos = {};\n\nlet respuesta = '';\nlet accion = null;   // <- hook para conectar servicios en la siguiente iteracion\n\nconst MENU =\n  `Hola${nombreUsuario ? ' ' + nombreUsuario : ''} 🙏 Soy el asistente de búsqueda de personas.\\n\\n` +\n  `¿Qué deseas hacer?\\n\\n` +\n  `1️⃣ Buscar una persona\\n` +\n  `2️⃣ Registrar una persona desaparecida\\n` +\n  `3️⃣ Ayuda\\n\\n` +\n  `Responde con el número de la opción.\\n` +\n  `Escribe *menú* en cualquier momento para volver aquí.`;\n\nconst AYUDA =\n  `ℹ️ *Ayuda*\\n\\n` +\n  `• *Buscar*: te guío para encontrar a una persona por foto o por nombre.\\n` +\n  `• *Registrar*: cargo los datos y la foto de una persona desaparecida.\\n` +\n  `• Escribe *menú* o *cancelar* en cualquier momento para reiniciar.\\n\\n` + MENU;\n\n// ---- 3. Comando global (solo aplica a texto) ----\nconst ESCAPES = ['menu', 'menú', '0', 'cancelar', 'salir', 'inicio'];\nif (!esImagen && ESCAPES.includes(texto)) {\n  sesion = { paso: 'menu', datos: {} };\n  respuesta = MENU;\n} else {\n  switch (sesion.paso) {\n\n    // ===================== MENU =====================\n    case 'menu': {\n      if (esImagen) { respuesta = 'Recibí una imagen 📷. Para usarla, primero elige una opción del menú.\\n\\n' + MENU; break; }\n      if (texto === '1') { sesion = { paso: 'buscar_modo', datos: {} }; respuesta = '🔎 *Buscar persona*\\n\\n¿Cómo quieres buscar?\\n\\n1️⃣ Por *foto* (reconocimiento facial)\\n2️⃣ Por *nombre* / datos'; }\n      else if (texto === '2') { sesion = { paso: 'reg_nombre', datos: {} }; respuesta = '📝 *Registrar persona desaparecida*\\n\\n¿Cuál es el *nombre completo* de la persona?'; }\n      else if (texto === '3') { sesion = { paso: 'menu', datos: {} }; respuesta = AYUDA; }\n      else { respuesta = MENU; }\n      break;\n    }\n\n    // ===================== BUSCAR (guiado) =====================\n    case 'buscar_modo': {\n      if (texto === '1') { sesion.paso = 'buscar_foto'; respuesta = 'Envía la *foto* de la persona que buscas. 📷\\n(o escribe *menú* para cancelar)'; }\n      else if (texto === '2') { sesion.paso = 'buscar_nombre'; respuesta = 'Escribe el *nombre* (o parte del nombre) de la persona que buscas.'; }\n      else { respuesta = 'Elige una opción:\\n1️⃣ Por foto\\n2️⃣ Por nombre'; }\n      break;\n    }\n    case 'buscar_foto': {\n      if (esImagen) {\n        sesion.datos.foto_ref = imagenRef;\n        accion = 'buscar_por_foto';   // <- aca: reconocimiento facial contra la BD\n        respuesta = '🧠 Recibí la foto. Buscando coincidencias por *reconocimiento facial*...\\n\\n(Prototipo: aquí aparecerán los resultados cuando conectemos el servicio.)\\n\\nEscribe *menú* para otra acción.';\n        sesion = { paso: 'menu', datos: {} };\n      } else {\n        respuesta = 'Necesito una *foto* para esta búsqueda. Envíala como imagen 📷, o escribe *menú* para cancelar.';\n      }\n      break;\n    }\n    case 'buscar_nombre': {\n      if (esImagen) { respuesta = 'Para este modo necesito *texto*. Escribe el nombre, o escribe *menú* para cambiar de opción.'; break; }\n      sesion.datos.query = textoRaw;\n      accion = 'buscar_por_nombre';   // <- aca: busqueda por nombre/datos en la BD\n      respuesta = `🔎 Buscando coincidencias para *\"${textoRaw}\"*...\\n\\n(Prototipo: aquí aparecerán los resultados al conectar la base de datos.)\\n\\nEscribe *menú* para otra acción.`;\n      sesion = { paso: 'menu', datos: {} };\n      break;\n    }\n\n    // ===================== REGISTRAR (guiado) =====================\n    case 'reg_nombre': {\n      if (esImagen) { respuesta = 'Primero el *nombre completo* (en texto), por favor.'; break; }\n      sesion.datos.nombre = textoRaw; sesion.paso = 'reg_edad';\n      respuesta = `¿Qué *edad* aproximada tiene ${textoRaw}?`; break;\n    }\n    case 'reg_edad': {\n      sesion.datos.edad = textoRaw; sesion.paso = 'reg_ubicacion';\n      respuesta = '¿Cuál fue la *última ubicación* conocida? (zona, calle, referencia)'; break;\n    }\n    case 'reg_ubicacion': {\n      sesion.datos.ultima_ubicacion = textoRaw; sesion.paso = 'reg_descripcion';\n      respuesta = 'Describe a la persona: *vestimenta, señas particulares, estatura*, etc.'; break;\n    }\n    case 'reg_descripcion': {\n      sesion.datos.descripcion = textoRaw; sesion.paso = 'reg_foto';\n      respuesta = 'Ahora envía una *foto* de la persona 📷.\\n(o escribe *omitir* si no tienes una)'; break;\n    }\n    case 'reg_foto': {\n      if (esImagen) { sesion.datos.foto_ref = imagenRef; sesion.paso = 'reg_contacto'; respuesta = '✅ Foto recibida.\\n\\n¿Un *número de contacto* tuyo para dar seguimiento?'; }\n      else if (['omitir', 'saltar', 'no'].includes(texto)) { sesion.datos.foto_ref = ''; sesion.paso = 'reg_contacto'; respuesta = 'Sin foto.\\n\\n¿Un *número de contacto* tuyo para dar seguimiento?'; }\n      else { respuesta = 'Por favor envía una *foto* (imagen) 📷, o escribe *omitir*.'; }\n      break;\n    }\n    case 'reg_contacto': {\n      sesion.datos.contacto = textoRaw; sesion.paso = 'reg_confirmar';\n      const d = sesion.datos;\n      respuesta =\n        `Confirma los datos:\\n\\n` +\n        `👤 Nombre: ${d.nombre}\\n🎂 Edad: ${d.edad}\\n📍 Última ubicación: ${d.ultima_ubicacion}\\n` +\n        `📝 Descripción: ${d.descripcion}\\n📷 Foto: ${d.foto_ref ? 'sí' : 'no'}\\n📞 Contacto: ${d.contacto}\\n\\n` +\n        `¿Confirmas el registro? (*sí* / *no*)`;\n      break;\n    }\n    case 'reg_confirmar': {\n      if (['si', 'sí', 's', 'confirmar', 'ok'].includes(texto)) {\n        accion = 'registrar_persona';   // <- aca: POST a la BD / servicio de registro\n        respuesta = '✅ Registro recibido. La persona fue cargada en el sistema.\\nGracias por tu colaboración.\\n\\nEscribe *menú* para otra acción.';\n        sesion = { paso: 'menu', datos: {} };\n      } else if (['no', 'n', 'cancelar'].includes(texto)) {\n        respuesta = 'Registro cancelado. Escribe *menú* para empezar de nuevo.';\n        sesion = { paso: 'menu', datos: {} };\n      } else {\n        respuesta = 'Responde *sí* para confirmar o *no* para cancelar.';\n      }\n      break;\n    }\n\n    default: { sesion = { paso: 'menu', datos: {} }; respuesta = MENU; }\n  }\n}\n\n// ---- 4. Memoria de conversacion ----\nconst previous = $('Obtener Historial1').item.json.history;\nconst history = [];\nif (previous) { try { history.push(...JSON.parse(previous).slice(-10)); } catch (x) {} }\nhistory.push({ role: 'user', content: esImagen ? '[imagen]' + (textoRaw ? ' ' + textoRaw : '') : textoRaw });\nhistory.push({ role: 'assistant', content: respuesta });\n\n// ---- 5. Salida ----\nreturn {\n  json: {\n    respuesta: respuesta,\n    reply: respuesta,\n    accion: accion,\n    datos: sesion.datos,\n    canal: e.canal,\n    estado_actualizado: JSON.stringify(sesion),\n    messages: JSON.stringify(history)\n  }\n};\n"
+      },
+      "name": "Motor Conversacional",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1728,
+        -160
+      ],
+      "id": "b7bfcdf5-a4a6-4e3e-b01e-94a298e3bdf3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.tipo }}",
+              "value2": "texto"
+            },
+            {
+              "value1": "={{ $json.tipo }}",
+              "value2": "imagen"
+            }
+          ]
+        },
+        "combineOperation": "any"
+      },
+      "name": "¿Procesar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        592,
+        -160
+      ],
+      "id": "843b9f35-f13b-463b-b268-c495bb60fa66"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/whatsapp/find-chat",
+        "options": {}
+      },
+      "name": "Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        112,
+        -160
+      ],
+      "id": "9142d684-2adf-4a1f-ad90-2c96b3b2ec1a",
+      "webhookId": "3f5eb356-fb31-4959-a3ce-4414338e9ddb"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// ============================================================================\n//  EXTRAER / NORMALIZAR ENTRADA  (multicanal: Telegram + WhatsApp Green API)\n//  Unifica texto e imagen de ambos canales en un formato comun.\n//  Las IMAGENES NO se filtran: se capturan como referencia (URL o file_id).\n//  Salida: { canal, tipo, text, caption, imagen_ref, chat_id, sender, nombre }\n//    tipo: 'texto' | 'imagen' | 'ignorar'\n// ============================================================================\nconst j = $input.item.json;\nconst out = {\n  canal: '', tipo: 'ignorar', text: '', caption: '',\n  imagen_ref: '', chat_id: '', sender: '', nombre: ''\n};\n\n// ---------- TELEGRAM (telegramTrigger) ----------\nif (j.message) {\n  const m = j.message;\n  out.canal = 'telegram';\n  out.chat_id = (m.chat && m.chat.id != null ? m.chat.id : '').toString();\n  out.sender = out.chat_id;\n  out.nombre = (m.from && m.from.first_name) ? m.from.first_name : '';\n\n  if (Array.isArray(m.photo) && m.photo.length) {\n    // Telegram NO da URL directa: guardamos el file_id de mayor resolucion.\n    // (Se resuelve a URL con un getFile en la iteracion de APIs.)\n    out.tipo = 'imagen';\n    out.imagen_ref = m.photo[m.photo.length - 1].file_id;\n    out.caption = m.caption || '';\n    out.text = m.caption || '';\n  } else if (typeof m.text === 'string' && m.text.trim() !== '') {\n    out.tipo = 'texto';\n    out.text = m.text;\n  }\n}\n\n// ---------- WHATSAPP (Green API webhook) ----------\nelse if (j.body && j.body.typeWebhook) {\n  const b = j.body;\n  out.canal = 'whatsapp';\n  out.sender = (b.senderData && b.senderData.sender) || '';\n  out.chat_id = (b.senderData && b.senderData.chatId) || out.sender;\n  out.nombre = (b.senderData && b.senderData.senderName) || '';\n\n  // Solo mensajes ENTRANTES (evita responderse a si mismo / loops)\n  if (b.typeWebhook === 'incomingMessageReceived') {\n    const md = b.messageData || {};\n    const t = md.typeMessage;\n    if (t === 'textMessage') {\n      out.tipo = 'texto';\n      out.text = (md.textMessageData && md.textMessageData.textMessage) || '';\n    } else if (t === 'extendedTextMessage') {\n      out.tipo = 'texto';\n      out.text = (md.extendedTextMessageData && md.extendedTextMessageData.text) || '';\n    } else if (t === 'imageMessage') {\n      // WhatsApp SI da URL directa\n      out.tipo = 'imagen';\n      out.imagen_ref = (md.fileMessageData && md.fileMessageData.downloadUrl) || '';\n      out.caption = (md.fileMessageData && md.fileMessageData.caption) || '';\n      out.text = out.caption;\n    }\n  }\n}\n\nreturn { json: out };\n"
+      },
+      "name": "Extraer Mensaje1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        832,
+        -160
+      ],
+      "id": "ac46671f-e11d-4c8c-9481-f2eb0378eb38"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "history",
+        "key": "=historial:{{ $('Extraer Mensaje1').item.json.chat_id }}",
+        "keyType": "string",
+        "options": {}
+      },
+      "name": "Obtener Historial1",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        -160
+      ],
+      "id": "a29b06c7-676c-4efc-ad98-c5d4d69dc8d4",
+      "credentials": {
+        "redis": {
+          "id": "ED9VELReZClCmzY8",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "=historial:{{ $('Extraer Mensaje1').item.json.chat_id }}",
+        "value": "={{ $json[\"messages\"] }}",
+        "expire": true,
+        "ttl": 1800
+      },
+      "name": "Guardar Historial1",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1968,
+        -160
+      ],
+      "id": "2e0f86c8-3047-4e3f-8d35-b3e0eb7c33e5",
+      "credentials": {
+        "redis": {
+          "id": "ED9VELReZClCmzY8",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.zavu.dev/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "zv_live_49f384d9e355338798928e1a4e680376b47c975f41cb3538"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to\": \"={{ $('Extraer Mensaje1').item.json.sender }}\",\n  \"channel\": \"whatsapp\",\n  \"text\": \"={{ $json.reply }}\"\n}",
+        "options": {}
+      },
+      "name": "Enviar Mensaje1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2176,
+        128
+      ],
+      "id": "9b1dfb7f-ece1-4b04-abb2-79c81cf827d2",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "=estado:{{ $('Extraer Mensaje1').item.json.chat_id }}",
+        "value": "={{ $json.estado_actualizado }}",
+        "expire": true,
+        "ttl": 1800
+      },
+      "name": "Guardar Estado1",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        -160
+      ],
+      "id": "05ff7a56-e014-4674-9c60-d24c62b698d5",
+      "credentials": {
+        "redis": {
+          "id": "ED9VELReZClCmzY8",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "estado",
+        "key": "=estado:{{ $('Extraer Mensaje1').item.json.chat_id }}",
+        "keyType": "string",
+        "options": {}
+      },
+      "name": "Obtener Estado1",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1184,
+        -160
+      ],
+      "id": "77f4b239-f085-447a-a182-3479cfc40555",
+      "credentials": {
+        "redis": {
+          "id": "ED9VELReZClCmzY8",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        64,
+        32
+      ],
+      "id": "e2971475-8df9-4dac-bfa3-90f97bde559b",
+      "name": "Telegram Trigger1",
+      "webhookId": "e3975054-cb0f-4117-b499-e355fe6e977a",
+      "credentials": {
+        "telegramApi": {
+          "id": "KSnMj1xBq3HsLh4e",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Extraer Mensaje1').first().json.chat_id }}",
+        "text": "={{ $json.respuesta }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2400,
+        -160
+      ],
+      "id": "19ef7169-0272-4fbb-9b85-93e3da5bca97",
+      "name": "Send a text message1",
+      "webhookId": "9ed624e1-b602-49d3-8a48-9cd67a045273",
+      "credentials": {
+        "telegramApi": {
+          "id": "KSnMj1xBq3HsLh4e",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Motor Conversacional": {
+      "main": [
+        [
+          {
+            "node": "Guardar Historial1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Procesar?": {
+      "main": [
+        [
+          {
+            "node": "Obtener Historial1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Extraer Mensaje1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Mensaje1": {
+      "main": [
+        [
+          {
+            "node": "¿Procesar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Historial1": {
+      "main": [
+        [
+          {
+            "node": "Obtener Estado1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Historial1": {
+      "main": [
+        [
+          {
+            "node": "Guardar Estado1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Estado1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Estado1": {
+      "main": [
+        [
+          {
+            "node": "Motor Conversacional",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Extraer Mensaje1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "920a191bfd47c09293290926c9c5e49ca7344ca48de3435c9ee650e4d48057e1"
+  }
+}

@@ -9,14 +9,17 @@ dependencies = [
     "apscheduler>=3.11.1",
     "fastapi[standard]>=0.138.1",
     "httpx>=0.28.1",
+    "pgvector>=0.3.6",
     "psycopg[binary]>=3.3.4",
     "pydantic-settings>=2.14.2",
+    "redis>=5.2.0",
     "sqlmodel>=0.0.39",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "ruff>=0.8.0",
     "testcontainers[postgres]>=4.13.3",
 ]
 # Optional native stack for local facial recognition (FACE_MATCHER=insightface).
@@ -35,3 +38,13 @@ markers = [
     "e2e: tests that start real infrastructure with testcontainers",
 ]
 addopts = "-m 'not e2e'"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"

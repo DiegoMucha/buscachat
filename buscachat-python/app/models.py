@@ -12,8 +12,11 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
+
+FACE_EMBEDDING_DIM = 512
 
 
 def utc_now() -> datetime:
@@ -126,7 +129,7 @@ class BotReport(SQLModel, table=True):
 
     face_embedding: list[float] | None = Field(
         default=None,
-        sa_column=Column(JSONB, nullable=True),
+        sa_column=Column(Vector(FACE_EMBEDDING_DIM), nullable=True),
     )
     status: str = Field(
         default="missing",
@@ -153,6 +156,32 @@ class BotReport(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )
     updated_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    )
+
+
+class WebhookEventLog(SQLModel, table=True):
+    __tablename__ = "webhook_event_logs"
+    __table_args__ = (
+        Index("ix_webhook_event_logs_created_at", "created_at"),
+    )
+
+    id: int | None = Field(
+        default=None,
+        sa_column=Column(BigInteger, primary_key=True, autoincrement=True),
+    )
+    method: str = Field(max_length=20)
+    url: str = Field(max_length=4000)
+    path: str = Field(max_length=1000)
+    source_ip: str | None = Field(default=None, max_length=100)
+    headers: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
+    query_params: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
+    body: Any | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
+    created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )

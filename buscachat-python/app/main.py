@@ -8,9 +8,14 @@ from sqlmodel import Session, select
 
 from app.config import Settings, get_settings
 from app.database import get_session, run_migrations
-from app.models import MissingPerson, SyncState
+from app.models import MissingPerson, SyncState, utc_now
 from app.routers import bot as bot_router
+from app.routers import web_chat as web_chat_router
+from app.routers import whatsapp_evolution_api_webhook as evolution_api_webhook_router
+from app.routers import whatsapp_green_api_webhook as green_api_webhook_router
+from app.routers import whatsapp_meta_webhook as meta_webhook_router
 from app.scheduler import start_scheduler
+from app.security import require_private_token
 from app.services.search import find_missing_person_by_name
 
 
@@ -29,21 +34,32 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=get_settings().app_name, lifespan=lifespan)
 app.include_router(bot_router.router)
+app.include_router(web_chat_router.router)
+app.include_router(evolution_api_webhook_router.router)
+app.include_router(green_api_webhook_router.router)
+app.include_router(meta_webhook_router.router)
 
 
-def require_private_token(
-    x_api_token: Annotated[str | None, Header()] = None,
-    settings: Settings = Depends(get_settings),
-) -> None:
-    if x_api_token != settings.private_api_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API token",
-        )
+@app.get("/health")
+def health_check(session: Annotated[Session, Depends(get_session)]) -> dict:
+    db_ok = False
+    try:
+        session.exec(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        pass
+
+    return {
+        "status": "healthy" if db_ok else "degraded",
+        "database": "ok" if db_ok else "error",
+        "timestamp": utc_now().isoformat(),
+    }
 
 
 @app.get("/health/db")
-def database_health(session: Annotated[Session, Depends(get_session)]) -> dict[str, str]:
+def database_health(
+    session: Annotated[Session, Depends(get_session)],
+) -> dict[str, str]:
     session.exec(text("SELECT 1"))
     return {"status": "ok"}
 
@@ -71,7 +87,9 @@ def list_missing_people(
         statement = statement.where(MissingPerson.source == source)
 
     statement = (
-        statement.order_by(MissingPerson.source_date.desc().nullslast(), MissingPerson.id.desc())
+        statement.order_by(
+            MissingPerson.source_date.desc().nullslast(), MissingPerson.id.desc()
+        )
         .offset(offset)
         .limit(limit)
     )

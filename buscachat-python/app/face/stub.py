@@ -11,7 +11,7 @@ class StubFaceMatcher:
     different ones. It never imports heavy native libraries.
     """
 
-    def __init__(self, dimensions: int = 128) -> None:
+    def __init__(self, dimensions: int = 512) -> None:
         self.dimensions = dimensions
 
     def embed(self, image_bytes: bytes) -> Embedding | None:

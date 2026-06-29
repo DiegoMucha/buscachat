@@ -33,6 +33,18 @@ def find_missing_person_by_name(session: Session, name: str) -> MissingPerson | 
     return None
 
 
+def find_missing_person_by_cedula(session: Session, cedula: str) -> MissingPerson | None:
+    cleaned = cedula.strip()
+    if not cleaned:
+        return None
+
+    digits = cleaned.upper().lstrip("VE-").strip()
+    return _first(
+        session,
+        select(MissingPerson).where(MissingPerson.cedula_masked.ilike(f"%{digits}%")),
+    )
+
+
 def _first(session: Session, statement):
     statement = statement.order_by(
         MissingPerson.source_date.desc().nullslast(),
