@@ -542,6 +542,10 @@ def _handle_buscar_modo_foto(
 ) -> dict[str, Any]:
     """Sub-menu: foto del rostro (facial) o foto de cedula (OCR)."""
     canal = msg["canal"]
+    # Si el usuario envió una foto sin elegir opcion, asumir busqueda por rostro
+    if msg.get("imagen_ref"):
+        set_conversation_state(chat_id, {"paso": "buscar_foto"}, store)
+        return _handle_buscar_foto(msg, chat_id, store)
     if text in ("1", "rostro", "foto rostro"):
         set_conversation_state(chat_id, {"paso": "buscar_foto"}, store)
         return make_response(chat_id, canal, "Enviame una *foto clara del rostro* de la persona que buscas. 📷")
@@ -555,12 +559,19 @@ def _handle_buscar_ocr(
     msg: dict[str, Any], chat_id: str, store: ConversationStateStore | None,
 ) -> dict[str, Any]:
     """Buscar escaneando foto de cedula con OCR."""
+    import logging
+    log = logging.getLogger(__name__)
     canal = msg["canal"]
-    if not msg.get("_image_bytes"):
-        return make_response(chat_id, canal, "Por favor envia una foto de la cedula.")
+    log.info("BUSCAR_OCR called: imagen_ref=%s has_bytes=%s text=%s",
+             bool(msg.get("imagen_ref")), bool(msg.get("_image_bytes")), msg.get("text", "")[:50])
+    image_bytes = msg.get("_image_bytes")
+    if not image_bytes:
+        if not msg.get("imagen_ref"):
+            return make_response(chat_id, canal, "Por favor envia una foto de la cedula.")
+        return make_response(chat_id, canal, "Procesando la imagen...")
     try:
         from app.services.ocr_service import extract_from_id_image
-        ocr = extract_from_id_image(msg["_image_bytes"])
+        ocr = extract_from_id_image(image_bytes)
         nombre = ocr.get("nombre")
         cedula = ocr.get("cedula")
         if not nombre and not cedula:

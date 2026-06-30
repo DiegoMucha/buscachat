@@ -70,25 +70,71 @@ def extract_from_id_image(image_bytes: bytes) -> dict[str, Any]:
 
 
 def _find_name(lines: list[str], full_text: str) -> str | None:
-    """Busca el nombre en el texto OCR de cédula venezolana."""
-    # Patrón: "NOMBRES" o "NOMBRE" seguido de texto
+    """Busca nombre completo: APELLIDOS + NOMBRES (formato cedula venezolana).
+
+    Tambien prueba buscar por posicion: en cedulas venezolanas,
+    APELLIDOS suele estar en las primeras lineas despues de los datos de la republica.
+    """
+    nombres = ""
+    apellidos = ""
+
+    log.info("OCR lines: %s", lines)
+
     for i, line in enumerate(lines):
-        if re.search(r"NOMBRE", line, re.IGNORECASE):
-            # El nombre suele estar en la misma línea o la siguiente
-            name_line = line if len(line.split()) > 2 else (lines[i + 1] if i + 1 < len(lines) else "")
-            name_line = re.sub(r"(?i)NOMBRES?:?\s*", "", name_line).strip()
-            if name_line:
-                return name_line
+        # Detectar NOMBRES (flexible)
+        if re.search(r"NOM(BRE|S)?S?", line, re.IGNORECASE):
+            cleaned = re.sub(r"(?i)NOM(BRE|S)?S?:?\s*", "", line).strip()
+            if cleaned and len(cleaned) > 2:
+                nombres = cleaned
+            elif i + 1 < len(lines):
+                nombres = lines[i + 1].strip()
 
-    # Fallback: buscar línea con formato "Nombre Apellido"
-    for line in lines:
-        words = line.split()
-        if 2 <= len(words) <= 6 and all(w[0].isupper() for w in words if w):
-            # Evitar líneas que son solo números o códigos
-            if not re.search(r"^\d", line) and not re.search(r"VENEZOLANO|REPUBLICA|CEDULA", line, re.IGNORECASE):
-                return line
+        # Detectar APELLIDOS (flexible: APEL, APELL, APELUDOs, etc.)
+        for j, candidate in enumerate(lines):
+            if re.search(r"APE(L{1,}|LL|LUDO)", candidate, re.IGNORECASE):
+                # Limpiar todo desde APE hasta donde empiezan los apellidos reales
+                cleaned = re.sub(r"(?i)APE(L{1,}|LL|LUDO)S?:?\s*", "", candidate).strip()
+                if cleaned and len(cleaned) > 2:
+                    apellidos = cleaned
+                elif j + 1 < len(lines):
+                    apellidos = lines[j + 1].strip()
+                break
 
-    return None
+    log.info("OCR name: nombres=%r apellidos=%r", nombres, apellidos)
+
+    # Limpiar ruido OCR (palabras cortas en mayusculas que no son nombres)
+    def _clean(s: str) -> str:
+        words = s.split()
+        result = []
+        for w in words:
+            if len(w) < 2:
+                continue
+            # Filtrar palabras que son mayusculas con una minuscula al final (ruido OCR)
+            upper_count = sum(1 for c in w if c.isupper())
+            if len(w) == 4 and upper_count >= 3 and w[-1].islower():
+                continue
+            result.append(w)
+        return " ".join(result)
+
+    nombres = _clean(nombres)
+    apellidos = _clean(apellidos)
+
+    # Formato natural: NOMBRES APELLIDOS
+    if apellidos and nombres:
+        return f"{nombres} {apellidos}"
+    if apellidos:
+        return apellidos
+    if nombres:
+        return nombres
+
+    # Ultimo fallback: agarrar las 2-3 lineas mas largas sin labels
+    candidates = [l for l in lines if len(l.split()) >= 2 and not re.search(
+        r"^\d|VENEZOLANO|REPUBLICA|BOLIVARIANA|CEDULA|NACIONALIDAD|ESTADO|FECHA|SEXO|NOMBRE|APELLIDO|FIRMA|HUELLA|V-|E-", l, re.IGNORECASE)]
+    candidates.sort(key=len, reverse=True)
+    log.info("OCR fallback: %s", candidates[:3])
+    if len(candidates) >= 2:
+        return f"{candidates[0]} {candidates[1]}"
+    return candidates[0] if candidates else None
 
 
 def _find_cedula(lines: list[str], full_text: str) -> str | None:
