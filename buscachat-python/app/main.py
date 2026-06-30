@@ -22,9 +22,9 @@ from app.services.search import find_missing_person_by_name
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    # run_migrations()
-    # scheduler = start_scheduler(settings)
-    # app.state.scheduler = scheduler
+    run_migrations()
+    scheduler = start_scheduler(settings)
+    app.state.scheduler = scheduler
     try:
         yield
     finally:
