@@ -26,7 +26,10 @@ def run_message_pipeline(
         message.to_conversation_payload(),
         store=conversation_store,
     )
-    buttons = [Button(id=str(button_id), title=str(title)) for button_id, title in result.get("buttons", [])]
+    buttons = [
+        Button(id=str(button_id), title=str(title))
+        for button_id, title in result.get("buttons", [])
+    ]
 
     if result.get("accion") is None:
         return GenericOutboundMessage(
@@ -89,7 +92,10 @@ def run_message_pipeline(
                     },
                     conversation_store,
                 )
-            text = "✅ Encontramos una posible coincidencia por foto:\n\n" + _format_bot_report(match)
+            text = (
+                "✅ Encontramos una posible coincidencia por foto:\n\n"
+                + _format_bot_report(match)
+            )
             out_buttons = []
             if match.status != "found":
                 text += "\n\nResponde *marcar* para marcarla como encontrada."
@@ -130,7 +136,9 @@ def run_message_pipeline(
 
     if action == "buscar_por_nombre":
         name = datos.get("query", "")
-        people = bot_intake.search_by_name_matches(session, name, limit=10) if name else []
+        people = (
+            bot_intake.search_by_name_matches(session, name, limit=10) if name else []
+        )
         return _search_people_response(
             message,
             session,
@@ -144,21 +152,50 @@ def run_message_pipeline(
     if action == "buscar_por_ocr":
         nombre = datos.get("nombre_ocr")
         cedula = datos.get("cedula_ocr")
-        # Buscar primero por cédula, si no por nombre
-        person = None
+        person: MissingPerson | None = None
         if cedula:
             person = find_missing_person_by_cedula(session, cedula)
-        if not person and nombre:
-            person = bot_intake.search_by_name(session, nombre)
+        if person:
+            # Si encontró por cedula exacta, mostrar solo esa
+            return _search_person_response(
+                message,
+                session,
+                chat_id,
+                action,
+                person,
+                f"No se encontro a nadie con cedula *{cedula}*.",
+                conversation_store,
+            )
+        if nombre:
+            # Buscar por nombre (hasta 10 resultados)
+            people = bot_intake.search_by_name_matches(session, nombre, limit=10)
+            if people:
+                return _search_people_response(
+                    message,
+                    session,
+                    chat_id,
+                    action,
+                    nombre,
+                    people,
+                    conversation_store,
+                )
         return _search_person_response(
-            message, session, chat_id, action, person,
-            f"No se encontro a la persona de la cedula.",
+            message,
+            session,
+            chat_id,
+            action,
+            None,
+            "No se pudo extraer informacion de la cedula.",
             conversation_store,
         )
 
     if action == "marcar_encontrado":
         person_id = datos.get("person_id")
-        person = bot_intake.mark_missing_person_found(session, int(person_id)) if person_id else None
+        person = (
+            bot_intake.mark_missing_person_found(session, int(person_id))
+            if person_id
+            else None
+        )
         if person is None:
             text = "No se pudo identificar a la persona."
         else:
@@ -171,7 +208,9 @@ def run_message_pipeline(
             buttons=[Button(id="menu", title="Menu")],
         )
 
-    return GenericOutboundMessage(source=message.source, chat_id=chat_id, text="Listo.", action=action)
+    return GenericOutboundMessage(
+        source=message.source, chat_id=chat_id, text="Listo.", action=action
+    )
 
 
 def _search_person_response(
@@ -248,7 +287,9 @@ def _search_people_response(
             buttons=[Button(id="menu", title="Menu")],
         )
 
-    linked_reports = _get_linked_bot_reports_by_person_id(session, [person.id for person in people])
+    linked_reports = _get_linked_bot_reports_by_person_id(
+        session, [person.id for person in people]
+    )
     text = _format_name_search_results(query, people, linked_reports)
     buttons = [Button(id="menu", title="Menu")]
 
@@ -279,24 +320,35 @@ def _search_people_response(
     )
 
 
-def _get_linked_bot_report(session: Any, missing_person_id: int | None) -> BotReport | None:
+def _get_linked_bot_report(
+    session: Any, missing_person_id: int | None
+) -> BotReport | None:
     if session is None or missing_person_id is None:
         return None
-    return session.exec(select(BotReport).where(BotReport.missing_person_id == missing_person_id)).first()
+    return session.exec(
+        select(BotReport).where(BotReport.missing_person_id == missing_person_id)
+    ).first()
 
 
 def _get_linked_bot_reports_by_person_id(
     session: Any,
     missing_person_ids: list[int | None],
 ) -> dict[int, BotReport]:
-    person_ids = [person_id for person_id in missing_person_ids if person_id is not None]
+    person_ids = [
+        person_id for person_id in missing_person_ids if person_id is not None
+    ]
     if session is None or not person_ids:
         return {}
 
-    reports = session.exec(select(BotReport).where(BotReport.missing_person_id.in_(person_ids))).all()
+    reports = session.exec(
+        select(BotReport).where(BotReport.missing_person_id.in_(person_ids))
+    ).all()
     linked: dict[int, BotReport] = {}
     for report in reports:
-        if report.missing_person_id is not None and report.missing_person_id not in linked:
+        if (
+            report.missing_person_id is not None
+            and report.missing_person_id not in linked
+        ):
             linked[report.missing_person_id] = report
     return linked
 
@@ -307,15 +359,21 @@ def _format_bot_report(report: Any) -> str:
         parts.append(f"🎂 Edad: {report.age}")
     if getattr(report, "description", None):
         parts.append(f"📝 Descripcion: {report.description}")
-    location = getattr(report, "location", None) or getattr(report, "_linked_location", None)
+    location = getattr(report, "location", None) or getattr(
+        report, "_linked_location", None
+    )
     if location:
         parts.append(f"📍 Direccion/ubicacion: {location}")
     if getattr(report, "contact", None):
         parts.append(f"📞 Contacto: {report.contact}")
-    cedula = getattr(report, "_linked_cedula", None) or getattr(report, "cedula_masked", None)
+    cedula = getattr(report, "_linked_cedula", None) or getattr(
+        report, "cedula_masked", None
+    )
     if cedula:
         parts.append(f"🪪 Cedula: {cedula}")
-    photo_url = getattr(report, "photo_url", None) or getattr(report, "_linked_photo_url", None)
+    photo_url = getattr(report, "photo_url", None) or getattr(
+        report, "_linked_photo_url", None
+    )
     parts.append(f"🖼 Imagen: {photo_url or 'no disponible'}")
     parts.append(_format_status(report.status))
     return "\n".join(parts)
@@ -344,11 +402,15 @@ def _format_name_search_results(
     for index, person in enumerate(people, start=1):
         report = linked_reports.get(person.id) if person.id is not None else None
         blocks.append(_format_name_search_result(index, person, report))
-    blocks.append("Escribe *menu* para realizar otra busqueda o registrar informacion nueva.")
+    blocks.append(
+        "Escribe *menu* para realizar otra busqueda o registrar informacion nueva."
+    )
     return "\n\n".join(blocks)
 
 
-def _format_name_search_result(index: int, person: MissingPerson, report: BotReport | None) -> str:
+def _format_name_search_result(
+    index: int, person: MissingPerson, report: BotReport | None
+) -> str:
     name = report.full_name if report else person.full_name
     location = _report_location(report, person) if report else _person_location(person)
     photo_url = (report.photo_url if report else None) or person.photo_url
