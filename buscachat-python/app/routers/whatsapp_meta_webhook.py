@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import logging
+import time
 from typing import Annotated, Any
 
 import httpx
@@ -35,6 +36,46 @@ router = APIRouter(
 )
 
 
+def _text_prefix(text: str | None, length: int = 3) -> str:
+    return (text or "")[:length].replace("\n", "\\n").replace("\r", "\\r")
+
+
+def _identifier_hash(value: str | None, secret: str = "", length: int = 12) -> str:
+    clean_value = value or ""
+    if secret:
+        digest = hmac.new(
+            secret.encode("utf-8"), clean_value.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+    else:
+        digest = hashlib.sha256(clean_value.encode("utf-8")).hexdigest()
+    return digest[:length]
+
+
+def _elapsed_ms(start: float) -> float:
+    return (time.perf_counter() - start) * 1000
+
+
+def _state_step(
+    conversation_store: ConversationStateStore, chat_id: str, secret: str = ""
+) -> str:
+    try:
+        return str(conversation_store.get_state(chat_id).get("paso", "unknown"))
+    except Exception:
+        log.exception(
+            "Failed to read conversation state for Meta chat_hash=%s",
+            _identifier_hash(chat_id, secret),
+        )
+        return "unknown"
+
+
+def _payload_text(payload: dict[str, Any]) -> str:
+    if payload.get("type") == "interactive":
+        return str(
+            ((payload.get("interactive") or {}).get("body") or {}).get("text") or ""
+        )
+    return str((payload.get("text") or {}).get("body") or "")
+
+
 def _verify_meta_signature(
     raw_body: bytes,
     signature_header: str | None,
@@ -60,6 +101,7 @@ def _download_meta_image(
     *,
     timeout: float = 30.0,
 ) -> bytes | None:
+    start = time.perf_counter()
     try:
         with httpx.Client(timeout=timeout) as client:
             url_response = client.get(
@@ -76,9 +118,19 @@ def _download_meta_image(
                 headers={"Authorization": f"Bearer {access_token}"},
             )
             image_response.raise_for_status()
+            log.info(
+                "Meta image download succeeded media_id=%s bytes=%s elapsed_ms=%.1f",
+                media_id,
+                len(image_response.content),
+                _elapsed_ms(start),
+            )
             return image_response.content
     except Exception:
-        log.exception("Failed to download Meta image %s", media_id)
+        log.exception(
+            "Failed to download Meta image %s elapsed_ms=%.1f",
+            media_id,
+            _elapsed_ms(start),
+        )
         return None
 
 
@@ -88,23 +140,58 @@ def _send_meta_message(
     settings: Settings,
     buttons: list[Button] | None = None,
 ) -> None:
+    chat_hash = _identifier_hash(chat_id, settings.meta_app_secret)
     if not settings.meta_access_token or not settings.meta_phone_number_id:
-        log.warning("Meta credentials missing; not sending to %s", chat_id)
+        log.warning(
+            "Meta credentials missing; not sending chat_hash=%s text_prefix=%r text_len=%s buttons=%s",
+            chat_hash,
+            _text_prefix(text),
+            len(text),
+            len(buttons or []),
+        )
         return
 
+    send_start = time.perf_counter()
     payloads: list[dict[str, Any]]
     if buttons:
         if len(text) > META_INTERACTIVE_BODY_LIMIT:
-            payloads = [_meta_text_payload(chat_id, chunk) for chunk in _split_meta_text(text)]
-            payloads.append(_meta_interactive_payload(chat_id, META_BUTTON_PROMPT, buttons))
+            payloads = [
+                _meta_text_payload(chat_id, chunk) for chunk in _split_meta_text(text)
+            ]
+            payloads.append(
+                _meta_interactive_payload(chat_id, META_BUTTON_PROMPT, buttons)
+            )
         else:
             payloads = [_meta_interactive_payload(chat_id, text, buttons)]
     else:
-        payloads = [_meta_text_payload(chat_id, chunk) for chunk in _split_meta_text(text)]
+        payloads = [
+            _meta_text_payload(chat_id, chunk) for chunk in _split_meta_text(text)
+        ]
+
+    log.info(
+        "Meta outbound send start chat_hash=%s payloads=%s buttons=%s text_prefix=%r text_len=%s",
+        chat_hash,
+        len(payloads),
+        len(buttons or []),
+        _text_prefix(text),
+        len(text),
+    )
 
     try:
         with httpx.Client(timeout=15.0) as client:
-            for payload in payloads:
+            for index, payload in enumerate(payloads, start=1):
+                payload_start = time.perf_counter()
+                payload_type = str(payload.get("type") or "text")
+                payload_text = _payload_text(payload)
+                log.info(
+                    "Meta outbound payload start chat_hash=%s payload=%s/%s type=%s text_prefix=%r text_len=%s",
+                    chat_hash,
+                    index,
+                    len(payloads),
+                    payload_type,
+                    _text_prefix(payload_text),
+                    len(payload_text),
+                )
                 response = client.post(
                     f"https://graph.facebook.com/{settings.meta_graph_api_version}/{settings.meta_phone_number_id}/messages",
                     headers={
@@ -114,16 +201,35 @@ def _send_meta_message(
                     json=payload,
                 )
                 response.raise_for_status()
+                log.info(
+                    "Meta outbound payload sent chat_hash=%s payload=%s/%s type=%s status=%s elapsed_ms=%.1f",
+                    chat_hash,
+                    index,
+                    len(payloads),
+                    payload_type,
+                    getattr(response, "status_code", "unknown"),
+                    _elapsed_ms(payload_start),
+                )
+        log.info(
+            "Meta outbound send done chat_hash=%s elapsed_ms=%.1f",
+            chat_hash,
+            _elapsed_ms(send_start),
+        )
     except httpx.HTTPStatusError as exc:
         response = exc.response
         log.exception(
-            "Failed to send Meta message to %s: status=%s body=%s",
-            chat_id,
+            "Failed to send Meta message chat_hash=%s status=%s body=%s elapsed_ms=%.1f",
+            chat_hash,
             response.status_code,
             response.text[:500],
+            _elapsed_ms(send_start),
         )
     except Exception:
-        log.exception("Failed to send Meta message to %s", chat_id)
+        log.exception(
+            "Failed to send Meta message chat_hash=%s elapsed_ms=%.1f",
+            chat_hash,
+            _elapsed_ms(send_start),
+        )
 
 
 def _meta_text_payload(chat_id: str, text: str) -> dict[str, Any]:
@@ -134,7 +240,9 @@ def _meta_text_payload(chat_id: str, text: str) -> dict[str, Any]:
     }
 
 
-def _meta_interactive_payload(chat_id: str, text: str, buttons: list[Button]) -> dict[str, Any]:
+def _meta_interactive_payload(
+    chat_id: str, text: str, buttons: list[Button]
+) -> dict[str, Any]:
     return {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
@@ -145,7 +253,8 @@ def _meta_interactive_payload(chat_id: str, text: str, buttons: list[Button]) ->
             "body": {"text": text},
             "action": {
                 "buttons": [
-                    {"type": "reply", "reply": {"id": button.id, "title": button.title}} for button in buttons[:3]
+                    {"type": "reply", "reply": {"id": button.id, "title": button.title}}
+                    for button in buttons[:3]
                 ]
             },
         },
@@ -200,6 +309,7 @@ async def whatsapp_meta_webhook(
     ],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> Response:
+    request_start = time.perf_counter()
     raw_body = await request.body()
     signature_header = request.headers.get("x-hub-signature-256")
     if not _verify_meta_signature(
@@ -207,19 +317,53 @@ async def whatsapp_meta_webhook(
         signature_header,
         settings.meta_app_secret,
     ):
-        log.warning("Rejected Meta webhook POST with invalid signature")
+        log.warning(
+            "Rejected Meta webhook POST with invalid signature elapsed_ms=%.1f",
+            _elapsed_ms(request_start),
+        )
         return Response(content="Invalid signature", status_code=403)
 
     try:
         body = json.loads(raw_body)
     except json.JSONDecodeError:
+        log.warning(
+            "Rejected Meta webhook POST with invalid JSON bytes=%s elapsed_ms=%.1f",
+            len(raw_body),
+            _elapsed_ms(request_start),
+        )
         return Response(content="Invalid JSON", status_code=400)
 
     message = adapt_meta_message(body)
     if message is None:
+        log.info(
+            "Meta webhook received no message bytes=%s elapsed_ms=%.1f",
+            len(raw_body),
+            _elapsed_ms(request_start),
+        )
         return Response(content="ok", media_type="text/plain")
 
-    if message.kind == MessageKind.IMAGE and message.image_ref and settings.meta_access_token:
+    chat_hash = _identifier_hash(message.chat_id, settings.meta_app_secret)
+    step_before = _state_step(
+        conversation_store, message.chat_id, settings.meta_app_secret
+    )
+    log.info(
+        "Meta inbound message received chat_hash=%s message_id=%s kind=%s step=%s "
+        "text_prefix=%r text_len=%s has_image=%s",
+        chat_hash,
+        message.message_id,
+        message.kind,
+        step_before,
+        _text_prefix(message.text),
+        len(message.text),
+        bool(message.image_ref),
+    )
+
+    if (
+        message.kind == MessageKind.IMAGE
+        and message.image_ref
+        and settings.meta_access_token
+    ):
+        image_start = time.perf_counter()
         image_bytes = _download_meta_image(
             message.image_ref,
             settings.meta_graph_api_version,
@@ -232,23 +376,27 @@ async def whatsapp_meta_webhook(
                 "No se pudo descargar la imagen. Intenta de nuevo.",
                 settings,
             )
+            log.info(
+                "Meta webhook completed after image download failure chat_hash=%s elapsed_ms=%.1f",
+                chat_hash,
+                _elapsed_ms(request_start),
+            )
             return Response(content="ok", media_type="text/plain")
         message.image_bytes = image_bytes
-        # Solo generar embedding si el estado indica que se necesita (registro o busqueda facial)
-        state = conversation_store.get_state(message.chat_id) if conversation_store else {}
-        paso = state.get("paso", "") if state else ""
-        if paso in ("reg_foto", "buscar_foto"):
-            try:
-                message.image_embedding = matcher.embed(image_bytes)
-                if message.image_embedding:
-                    save_embedding_for_chat(
-                        message.chat_id,
-                        message.image_embedding,
-                        conversation_store,
-                    )
-            except Exception:
-                log.debug("Face embedding skipped (no insightface or no face detected)")
+        message.image_embedding = matcher.embed(image_bytes)
+        save_embedding_for_chat(
+            message.chat_id,
+            message.image_embedding,
+            conversation_store,
+        )
+        log.info(
+            "Meta image processed chat_hash=%s embedding=%s elapsed_ms=%.1f",
+            chat_hash,
+            bool(message.image_embedding),
+            _elapsed_ms(image_start),
+        )
 
+    pipeline_start = time.perf_counter()
     outbound = run_message_pipeline(
         message,
         session=session,
@@ -257,5 +405,27 @@ async def whatsapp_meta_webhook(
         settings=settings,
         conversation_store=conversation_store,
     )
-    _send_meta_message(outbound.chat_id, outbound.text, settings, buttons=outbound.buttons)
+    step_after = _state_step(
+        conversation_store, message.chat_id, settings.meta_app_secret
+    )
+    log.info(
+        "Meta conversation pipeline done chat_hash=%s step_before=%s step_after=%s action=%s "
+        "output_prefix=%r output_len=%s buttons=%s elapsed_ms=%.1f",
+        chat_hash,
+        step_before,
+        step_after,
+        outbound.action,
+        _text_prefix(outbound.text),
+        len(outbound.text),
+        len(outbound.buttons),
+        _elapsed_ms(pipeline_start),
+    )
+    _send_meta_message(
+        outbound.chat_id, outbound.text, settings, buttons=outbound.buttons
+    )
+    log.info(
+        "Meta webhook completed chat_hash=%s elapsed_ms=%.1f",
+        chat_hash,
+        _elapsed_ms(request_start),
+    )
     return Response(content="ok", media_type="text/plain")

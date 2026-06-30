@@ -146,15 +146,15 @@ def test_meta_sender_splits_long_text_before_sending_buttons(monkeypatch) -> Non
     monkeypatch.setattr(whatsapp_meta_webhook.httpx, "Client", FakeClient)
 
     _send_meta_message(
-        "59170000000",
-        "Resultado\n" + ("Juan Perez encontrado\n" * 80),
+        "15551234567",
+        "Resultado\n" + ("Example Person found\n" * 80),
         Settings(meta_access_token="token", meta_phone_number_id="phone-id"),
         buttons=[Button(id="menu", title="Menu")],
     )
 
     assert len(sent_payloads) == 2
     assert "type" not in sent_payloads[0]
-    assert "Juan Perez encontrado" in sent_payloads[0]["text"]["body"]
+    assert "Example Person found" in sent_payloads[0]["text"]["body"]
     assert sent_payloads[1]["type"] == "interactive"
     assert sent_payloads[1]["interactive"]["body"]["text"] == "Elige una opcion:"
     assert sent_payloads[1]["interactive"]["action"]["buttons"][0]["reply"] == {

@@ -67,7 +67,19 @@ def test_web_chat_messages_support_polling_after_id() -> None:
     client = _client()
 
     client.post("/web-chat/webhook", json={"text": "hola"})
-    client.post("/web-chat/webhook", json={"text": "1"})
+    search_response = client.post("/web-chat/webhook", json={"text": "1"}).json()
+
+    search_message = search_response["messages"][1]
+    assert "Busqueda de persona" in search_message["text"]
+    assert "Elige una de las opciones:" in search_message["text"]
+    assert [(button["id"], button["title"]) for button in search_message["buttons"]] == [
+        ("1", "Buscar por cédula o nombre"),
+        ("2", "Buscar por foto"),
+    ]
+
+    query_prompt_response = client.post("/web-chat/webhook", json={"text": "1"}).json()
+    assert "nombre" in query_prompt_response["messages"][1]["text"]
+    assert "cédula" in query_prompt_response["messages"][1]["text"]
 
     messages = client.get("/web-chat/messages?after_id=2").json()
     assert messages[0]["text"] == "1"
