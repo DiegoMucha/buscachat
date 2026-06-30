@@ -68,3 +68,9 @@ def _ordered(statement):
         MissingPerson.source_date.desc().nullslast(),
         MissingPerson.id.desc(),
     )
+
+
+def _looks_like_cedula(text: str) -> bool:
+    """Detecta si un texto parece un numero de cedula venezolana."""
+    cleaned = text.strip().upper().lstrip("VE-").replace(".", "").replace(" ", "")
+    return len(cleaned) >= 5 and cleaned.isdigit()
