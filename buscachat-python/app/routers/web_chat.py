@@ -9,6 +9,7 @@ from app.adapters.green_api import Notifier
 from app.config import Settings, get_settings
 from app.database import get_session
 from app.face import FaceMatcher
+from app.messaging import MessageKind
 from app.messaging.adapters.web import WEB_CHAT_ID, adapt_web_message
 from app.messaging.conversation import set_conversation_state
 from app.messaging.dependencies import (
@@ -85,7 +86,10 @@ def web_chat_webhook(
     if inbound.image_ref and inbound.kind == MessageKind.IMAGE:
         try:
             from app.utils.images import download_image
-            inbound.image_bytes = download_image(inbound.image_ref, timeout=settings.image_download_timeout_seconds)
+
+            inbound.image_bytes = download_image(
+                inbound.image_ref, timeout=settings.image_download_timeout_seconds
+            )
         except Exception:
             pass  # No bloquea el flujo si falla
 
