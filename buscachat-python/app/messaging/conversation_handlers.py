@@ -311,12 +311,13 @@ def handle_reg_cedula_ocr(
                 state["_ocr_data"] = ocr_data
                 state["paso"] = "reg_ocr_confirmar"
                 set_conversation_state(chat_id, state, store)
-                return make_response(
-                    chat_id,
-                    canal,
-                    f"*Datos detectados por OCR:*\n\n¿Es correcto? *{state['nombre']}*",
-                    buttons=[("si", "Si"), ("no", "No")],
-                )
+                resumen = f"*Datos detectados:*\nNombre: {state['nombre']}"
+                if state.get("cedula"):
+                    resumen += f"\nCedula: {state['cedula']}"
+                if ocr_data.get("fecha_nacimiento"):
+                    resumen += f"\nFecha nacimiento: {ocr_data['fecha_nacimiento']}"
+                resumen += "\n\n*¿Es correcto?*"
+                return make_response(chat_id, canal, resumen, buttons=[("si", "Si"), ("no", "No")])
         except ImportError:
             pass
         except Exception:
@@ -341,13 +342,10 @@ def handle_reg_ocr_confirmar(
         return make_response(
             chat_id, canal, f"¿Donde fue vista por ultima vez *{state['nombre']}*?"
         )
+    state["nombre"] = state.get("_nombre_original", state["nombre"])
     state["paso"] = "reg_edad"
     set_conversation_state(chat_id, state, store)
-    return make_response(
-        chat_id,
-        canal,
-        f"Ok. ¿Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.",
-    )
+    return make_response(chat_id, canal, f"Ok, usamos el nombre que escribiste. ¿Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")
 
 
 def handle_reg_edad(
