@@ -1,12 +1,11 @@
 [project]
 name = "buscachat-python"
 version = "0.1.0"
-description = "FastAPI service that syncs missing people reports into Postgres"
+description = "FastAPI chatbot service for missing people search and reports"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.18.5",
-    "apscheduler>=3.11.1",
     "fastapi[standard]>=0.138.1",
     "httpx>=0.28.1",
     "opentelemetry-distro>=0.64b0",

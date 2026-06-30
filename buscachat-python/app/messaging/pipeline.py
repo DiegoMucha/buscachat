@@ -4,16 +4,15 @@ from urllib.parse import quote_plus
 
 import httpx
 from opentelemetry import trace
-from sqlmodel import Session, select
+from sqlmodel import Session
 
-from app.adapters.green_api import Notifier
 from app.adapters.venezuela_te_busca import VenezuelaTeBuscaSearchResult, search_venezuela_te_busca
 from app.config import Settings
 from app.face import FaceMatcher
 from app.messaging.conversation import run_conversation_motor, set_conversation_state
+from app.messaging.notifier import Notifier
 from app.messaging.session_store import ConversationStateStore
 from app.messaging.types import Button, GenericInboundMessage, GenericOutboundMessage
-from app.models import BotReport, MissingPerson
 from app.services import bot_intake
 
 PRIMARY_SOURCE_URL = "https://venezuelatebusca.com/"
@@ -146,8 +145,7 @@ def run_message_pipeline(
                 source=message.source,
                 chat_id=chat_id,
                 text=(
-                    "No puedo consultar en este momento. "
-                    "Intenta de nuevo en unos minutos o prueba con otra busqueda."
+                    "No puedo consultar en este momento. Intenta de nuevo en unos minutos o prueba con otra busqueda."
                 ),
                 action=action,
                 buttons=_search_navigation_buttons(),
@@ -163,8 +161,7 @@ def run_message_pipeline(
                 source=message.source,
                 chat_id=chat_id,
                 text=(
-                    "No puedo consultar en este momento. "
-                    "Intenta de nuevo en unos minutos o prueba con otra busqueda."
+                    "No puedo consultar en este momento. Intenta de nuevo en unos minutos o prueba con otra busqueda."
                 ),
                 action=action,
                 buttons=_search_navigation_buttons(),
@@ -207,110 +204,6 @@ def run_message_pipeline(
     return GenericOutboundMessage(source=message.source, chat_id=chat_id, text="Listo.", action=action)
 
 
-def _search_person_response(
-    message: GenericInboundMessage,
-    session: Session,
-    chat_id: str,
-    action: str,
-    person: MissingPerson | None,
-    not_found_text: str,
-    conversation_store: ConversationStateStore | None,
-) -> GenericOutboundMessage:
-    if person is None:
-        set_conversation_state(chat_id, None, conversation_store)
-        return GenericOutboundMessage(
-            source=message.source,
-            chat_id=chat_id,
-            text=not_found_text,
-            action=action,
-            buttons=_search_navigation_buttons(),
-        )
-
-    linked = _get_linked_bot_report(session, person.id)
-    set_conversation_state(
-        chat_id,
-        {
-            "paso": "buscar_resultado",
-            "person_id": person.id,
-            "person_name": person.full_name,
-            "person_status": person.status,
-        },
-        conversation_store,
-    )
-    if linked:
-        linked._linked_location = person.last_known_location
-        linked._linked_cedula = person.cedula_masked
-        text = _format_bot_report(linked)
-    else:
-        text = _format_missing_person(person)
-
-    buttons = _search_navigation_buttons()
-    if person.status != "found":
-        text += "\n\nResponde *marcar* para marcarla como encontrada."
-        buttons.insert(0, Button(id="marcar", title="Marcar encontrada"))
-
-    return GenericOutboundMessage(
-        source=message.source,
-        chat_id=chat_id,
-        text=text,
-        action=action,
-        buttons=buttons,
-    )
-
-
-def _search_people_response(
-    message: GenericInboundMessage,
-    session: Session,
-    chat_id: str,
-    action: str,
-    query: str,
-    people: list[MissingPerson],
-    conversation_store: ConversationStateStore | None,
-) -> GenericOutboundMessage:
-    if not people:
-        set_conversation_state(chat_id, None, conversation_store)
-        return GenericOutboundMessage(
-            source=message.source,
-            chat_id=chat_id,
-            text=(
-                f"❌ No encontramos resultados para *{query}*.\n\n"
-                "Puedes intentar con otro nombre, un apellido, cédula o una foto clara del rostro."
-            ),
-            action=action,
-            buttons=_search_navigation_buttons(),
-        )
-
-    linked_reports = _get_linked_bot_reports_by_person_id(session, [person.id for person in people])
-    text = _format_name_search_results(query, people, linked_reports)
-    buttons = _search_navigation_buttons()
-
-    if len(people) == 1:
-        person = people[0]
-        set_conversation_state(
-            chat_id,
-            {
-                "paso": "buscar_resultado",
-                "person_id": person.id,
-                "person_name": person.full_name,
-                "person_status": person.status,
-            },
-            conversation_store,
-        )
-        if person.status != "found":
-            text += "\n\nResponde *marcar* para marcarla como encontrada."
-            buttons.insert(0, Button(id="marcar", title="Marcar encontrada"))
-    else:
-        set_conversation_state(chat_id, None, conversation_store)
-
-    return GenericOutboundMessage(
-        source=message.source,
-        chat_id=chat_id,
-        text=text,
-        action=action,
-        buttons=buttons,
-    )
-
-
 def _external_search_response(
     message: GenericInboundMessage,
     chat_id: str,
@@ -336,7 +229,6 @@ def _external_search_response(
     text = _format_name_search_results(
         result.query or query,
         result.persons,
-        {},
         total_count=result.total_count,
     )
     if result.degraded:
@@ -348,28 +240,6 @@ def _external_search_response(
         action=action,
         buttons=_search_navigation_buttons(),
     )
-
-
-def _get_linked_bot_report(session: Any, missing_person_id: int | None) -> BotReport | None:
-    if session is None or missing_person_id is None:
-        return None
-    return session.exec(select(BotReport).where(BotReport.missing_person_id == missing_person_id)).first()
-
-
-def _get_linked_bot_reports_by_person_id(
-    session: Any,
-    missing_person_ids: list[int | None],
-) -> dict[int, BotReport]:
-    person_ids = [person_id for person_id in missing_person_ids if person_id is not None]
-    if session is None or not person_ids:
-        return {}
-
-    reports = session.exec(select(BotReport).where(BotReport.missing_person_id.in_(person_ids))).all()
-    linked: dict[int, BotReport] = {}
-    for report in reports:
-        if report.missing_person_id is not None and report.missing_person_id not in linked:
-            linked[report.missing_person_id] = report
-    return linked
 
 
 def _format_bot_report(report: Any) -> str:
@@ -391,22 +261,9 @@ def _format_bot_report(report: Any) -> str:
     return "\n".join(parts)
 
 
-def _format_missing_person(person: Any) -> str:
-    parts = [f"*{person.full_name}*"]
-    if getattr(person, "cedula_masked", None):
-        parts.append(f"🪪 Cédula: {person.cedula_masked}")
-    location = _person_location(person)
-    if location:
-        parts.append(f"📍 Direccion/ubicacion: {location}")
-    parts.append(f"*Orígen:* {_source_search_url(person.full_name)}")
-    parts.append(_format_status(person.status))
-    return "\n".join(parts)
-
-
 def _format_name_search_results(
     query: str,
     people: list[Any],
-    linked_reports: dict[int, BotReport],
     *,
     total_count: int | None = None,
 ) -> str:
@@ -418,23 +275,19 @@ def _format_name_search_results(
     header = f"Resultados para *{query}*\nMostrando {count_text} (maximo 10):"
     blocks = [header]
     for index, person in enumerate(people, start=1):
-        report = linked_reports.get(person.id) if person.id is not None else None
-        blocks.append(_format_name_search_result(index, person, report))
+        blocks.append(_format_name_search_result(index, person))
     return "\n\n".join(blocks)
 
 
-def _format_name_search_result(index: int, person: Any, report: BotReport | None) -> str:
-    name = report.full_name if report else person.full_name
-    location = _report_location(report, person) if report else _person_location(person)
+def _format_name_search_result(index: int, person: Any) -> str:
     lines = [
         f"{index}. *Estado:* {_format_status_text(person.status)}",
-        f"*Nombre:* {name}",
-        f"*Ubicación:* {location or 'no disponible'}",
+        f"*Nombre:* {person.full_name}",
+        f"*Ubicación:* {_person_location(person) or 'no disponible'}",
         f"*Orígen:* {_source_person_url(person, person.full_name)}",
     ]
-    age = report.age if report else getattr(person, "age", None)
-    if age:
-        lines.insert(2, f"*Edad:* {age}")
+    if getattr(person, "age", None):
+        lines.insert(2, f"*Edad:* {person.age}")
     if person.cedula_masked:
         lines.append(f"*Cédula:* {person.cedula_masked}")
     lines.extend(_status_detail_lines(person))
@@ -536,12 +389,6 @@ def _clean_text(value: Any) -> str | None:
         return None
     cleaned = " ".join(value.split())
     return cleaned or None
-
-
-def _report_location(report: BotReport | None, person: MissingPerson) -> str | None:
-    if report and report.location:
-        return report.location
-    return _person_location(person)
 
 
 def _person_location(person: Any) -> str | None:

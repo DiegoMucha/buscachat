@@ -9,7 +9,6 @@ from collections.abc import Sequence
 
 from alembic import op
 
-
 revision: str = "003_face_embedding_vector"
 down_revision: str | Sequence[str] | None = "002_bot_reports"
 branch_labels: str | Sequence[str] | None = None
@@ -22,20 +21,13 @@ def upgrade() -> None:
     # text cast converts any existing rows in place. Empty/early-stage tables
     # convert trivially.
     op.execute(
-        "ALTER TABLE bot_reports "
-        "ALTER COLUMN face_embedding TYPE vector(512) "
-        "USING face_embedding::text::vector"
+        "ALTER TABLE bot_reports ALTER COLUMN face_embedding TYPE vector(512) USING face_embedding::text::vector"
     )
     op.execute(
-        "CREATE INDEX ix_bot_reports_face_embedding "
-        "ON bot_reports USING hnsw (face_embedding vector_cosine_ops)"
+        "CREATE INDEX ix_bot_reports_face_embedding ON bot_reports USING hnsw (face_embedding vector_cosine_ops)"
     )
 
 
 def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS ix_bot_reports_face_embedding")
-    op.execute(
-        "ALTER TABLE bot_reports "
-        "ALTER COLUMN face_embedding TYPE jsonb "
-        "USING face_embedding::text::jsonb"
-    )
+    op.execute("ALTER TABLE bot_reports ALTER COLUMN face_embedding TYPE jsonb USING face_embedding::text::jsonb")

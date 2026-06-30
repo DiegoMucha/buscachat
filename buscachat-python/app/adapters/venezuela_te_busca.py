@@ -10,8 +10,7 @@ DEFAULT_BASE_URL = "https://venezuelatebusca.com"
 DEFAULT_HEADERS = {
     "Accept": "application/json, text/plain, */*",
     "User-Agent": (
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
     ),
 }
 log = logging.getLogger(__name__)

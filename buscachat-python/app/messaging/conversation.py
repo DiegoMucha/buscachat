@@ -15,6 +15,17 @@ GREETINGS = {
     "hello",
     "hi",
 }
+MENU_COMMAND = "menu"
+HELP_COMMANDS = {"3", "ayuda"}
+REGISTER_COMMANDS = {"2", "registrar"}
+SEARCH_QUERY_COMMANDS = {
+    "1",
+    "buscar por cedula o nombre",
+    "buscar por cédula o nombre",
+}
+SEARCH_PHOTO_COMMANDS = {"2", "buscar por foto"}
+MARK_FOUND_COMMANDS = {"marcar", "marcar encontrada"}
+CONFIRM_COMMANDS = {"si", "confirmar"}
 
 
 def _store(store: ConversationStateStore | None = None) -> ConversationStateStore:
@@ -98,14 +109,11 @@ def run_conversation_motor(
     store: ConversationStateStore | None = None,
 ) -> dict[str, Any]:
     chat_id = msg["chat_id"]
-    text = msg.get("text", "").strip().lower()
+    text = msg.get("text", "").strip().casefold()
 
-    if text in ("menu", "0", "cancelar", "salir", "inicio"):
+    if text == MENU_COMMAND:
         set_conversation_state(chat_id, {"paso": "menu"}, store)
         return menu_response(chat_id, msg["canal"])
-    if text in ("buscar", "volver a buscar"):
-        set_conversation_state(chat_id, {"paso": "buscar_modo"}, store)
-        return search_mode_response(chat_id, msg["canal"])
 
     state = get_conversation_state(chat_id, store)
     paso = state.get("paso", "menu")
@@ -122,6 +130,8 @@ def run_conversation_motor(
         return _handle_buscar_modo_foto(msg, chat_id, text, store)
     if paso == "buscar_ocr":
         return _handle_buscar_ocr(msg, chat_id, store)
+    if paso == "buscar_query":
+        return _handle_buscar_query(msg, chat_id, text, store)
     if paso == "buscar_nombre":
         return _handle_buscar_nombre(msg, chat_id, text, store)
     if paso == "buscar_cedula":
@@ -159,17 +169,17 @@ def _handle_menu(
     store: ConversationStateStore | None,
 ) -> dict[str, Any]:
     canal = msg["canal"]
-    if text in ("1", "buscar", "volver a buscar"):
+    if text in ("1", "buscar"):
         set_conversation_state(chat_id, {"paso": "buscar_modo"}, store)
         return search_mode_response(chat_id, canal)
-    if text == "2":
+    if text in REGISTER_COMMANDS:
         set_conversation_state(chat_id, {"paso": "reg_nombre"}, store)
         return make_response(
             chat_id,
             canal,
             "📝 *Registrar persona desaparecida*\n\nEscribe el *nombre completo* de la persona.",
         )
-    if text == "3":
+    if text in HELP_COMMANDS:
         return make_response(
             chat_id,
             canal,
@@ -199,14 +209,14 @@ def _handle_buscar_modo(
     canal = msg["canal"]
     if msg.get("imagen_ref"):
         return _handle_buscar_foto(msg, chat_id, store)
-    if text in ("1", "cedula", "cédula", "nombre", "por cedula", "por cédula", "por nombre"):
+    if text in SEARCH_QUERY_COMMANDS:
         set_conversation_state(chat_id, {"paso": "buscar_query"}, store)
         return make_response(
             chat_id,
             canal,
             "Escribe el *numero de cédula* o *nombre* de la persona que buscas:",
         )
-    if text in ("2", "foto", "por foto", "buscar por foto"):
+    if text in SEARCH_PHOTO_COMMANDS:
         set_conversation_state(chat_id, {"paso": "buscar_modo_foto"}, store)
         return make_response(
             chat_id, canal, "¿Que tipo de busqueda por foto?",
@@ -300,13 +310,13 @@ def _handle_buscar_resultado(
     store: ConversationStateStore | None,
 ) -> dict[str, Any]:
     canal = msg["canal"]
-    if text in ("menu", "0", "cancelar", "salir", "inicio"):
+    if text == MENU_COMMAND:
         set_conversation_state(chat_id, None, store)
         return menu_response(chat_id, canal)
     if text in ("buscar", "volver a buscar", "1"):
         set_conversation_state(chat_id, {"paso": "buscar_modo"}, store)
         return search_mode_response(chat_id, canal)
-    if text in ("si", "sí", "yes", "ok", "marcar"):
+    if text in MARK_FOUND_COMMANDS:
         state = get_conversation_state(chat_id, store)
         set_conversation_state(chat_id, None, store)
         return {
@@ -341,68 +351,6 @@ def _handle_reg_nombre(
         chat_id, canal,
         f"¿Tenes una foto de la cedula de *{nombre}*? Enviala para rellenar los datos, o escribe *no* para continuar.",
     )
-
-
-def _handle_reg_cedula_ocr(
-    msg: dict[str, Any],
-    chat_id: str,
-    store: ConversationStateStore | None,
-) -> dict[str, Any]:
-    """Paso opcional: escanear cedula con OCR."""
-    canal = msg["canal"]
-    state = get_conversation_state(chat_id, store)
-    text = msg.get("text", "").strip().lower()
-
-    if text in ("no", "omitir", "n", "no tengo", "ns"):
-        state["paso"] = "reg_edad"
-        set_conversation_state(chat_id, state, store)
-        return make_response(chat_id, canal, f"Ok. ¿Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")
-
-    if msg.get("imagen_ref") and msg.get("_image_bytes"):
-        try:
-            from app.services.ocr_service import extract_from_id_image
-            ocr_data = extract_from_id_image(msg["_image_bytes"])
-            if ocr_data.get("nombre"):
-                state["nombre"] = ocr_data["nombre"]
-            if ocr_data.get("cedula"):
-                state["cedula"] = ocr_data["cedula"]
-            state["_ocr_data"] = ocr_data
-
-            resumen = f"*Datos detectados:*\nNombre: {state['nombre']}"
-            if state.get("cedula"):
-                resumen += f"\nCedula: {state['cedula']}"
-            if ocr_data.get("fecha_nacimiento"):
-                resumen += f"\nFecha nacimiento: {ocr_data['fecha_nacimiento']}"
-            resumen += "\n\n*¿Es correcto?*"
-
-            state["paso"] = "reg_ocr_confirmar"
-            set_conversation_state(chat_id, state, store)
-            return make_response(chat_id, canal, resumen, buttons=[("si", "Si"), ("no", "No")])
-        except ImportError:
-            pass
-        except Exception:
-            pass
-
-    state["paso"] = "reg_edad"
-    set_conversation_state(chat_id, state, store)
-    return make_response(chat_id, canal, f"¿Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")
-
-
-def _handle_reg_ocr_confirmar(
-    msg: dict[str, Any],
-    chat_id: str,
-    text: str,
-    store: ConversationStateStore | None,
-) -> dict[str, Any]:
-    canal = msg["canal"]
-    state = get_conversation_state(chat_id, store)
-    if text in ("si", "yes", "ok"):
-        state["paso"] = "reg_ubicacion"
-        set_conversation_state(chat_id, state, store)
-        return make_response(chat_id, canal, f"¿Donde fue vista por ultima vez *{state['nombre']}*? (municipio, parroquia, hospital...)")
-    state["paso"] = "reg_edad"
-    set_conversation_state(chat_id, state, store)
-    return make_response(chat_id, canal, f"Ok. ¿Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")
 
 
 def _handle_reg_edad(
@@ -488,7 +436,7 @@ def _handle_reg_foto(
 ) -> dict[str, Any]:
     canal = msg["canal"]
     state = get_conversation_state(chat_id, store)
-    text = msg.get("text", "").strip().lower()
+    text = msg.get("text", "").strip().casefold()
 
     if text in ("omitir", "no", "no tengo"):
         state["imagen_ref"] = None
@@ -561,7 +509,7 @@ def _handle_reg_confirmar(
     state = get_conversation_state(chat_id, store)
     embedding = state.get("_embedding")
     set_conversation_state(chat_id, None, store)
-    if text in ("si", "sí", "yes", "ok"):
+    if text in CONFIRM_COMMANDS:
         return {
             "chat_id": chat_id,
             "canal": canal,
@@ -590,32 +538,26 @@ def _handle_reg_confirmar(
 
 
 def _handle_buscar_modo_foto(
-    msg: dict[str, Any],
-    chat_id: str,
-    text: str,
-    store: ConversationStateStore | None,
+    msg: dict[str, Any], chat_id: str, text: str, store: ConversationStateStore | None,
 ) -> dict[str, Any]:
-    """Sub-menu de busqueda por foto: facial o cedula (OCR)."""
+    """Sub-menu: foto del rostro (facial) o foto de cedula (OCR)."""
     canal = msg["canal"]
-    if text == "1":
+    if text in ("1", "rostro", "foto rostro"):
         set_conversation_state(chat_id, {"paso": "buscar_foto"}, store)
         return make_response(chat_id, canal, "Enviame una *foto clara del rostro* de la persona que buscas. 📷")
-    if text == "2":
+    if text in ("2", "cedula", "cédula", "foto cedula"):
         set_conversation_state(chat_id, {"paso": "buscar_ocr"}, store)
         return make_response(chat_id, canal, "Envia una *foto de la cedula* para buscar automaticamente.")
     return make_response(chat_id, canal, "Elegi *1* (foto rostro) o *2* (foto cedula)")
 
 
 def _handle_buscar_ocr(
-    msg: dict[str, Any],
-    chat_id: str,
-    store: ConversationStateStore | None,
+    msg: dict[str, Any], chat_id: str, store: ConversationStateStore | None,
 ) -> dict[str, Any]:
-    """Buscar persona escaneando foto de cedula con OCR."""
+    """Buscar escaneando foto de cedula con OCR."""
     canal = msg["canal"]
-    if not msg.get("imagen_ref") or not msg.get("_image_bytes"):
+    if not msg.get("_image_bytes"):
         return make_response(chat_id, canal, "Por favor envia una foto de la cedula.")
-
     try:
         from app.services.ocr_service import extract_from_id_image
         ocr = extract_from_id_image(msg["_image_bytes"])
@@ -631,6 +573,58 @@ def _handle_buscar_ocr(
             "sender": msg.get("sender"), "nombre": msg.get("nombre"),
         }
     except ImportError:
-        return make_response(chat_id, canal, "El servicio OCR no esta disponible. Busca manualmente por cedula o nombre.")
+        return make_response(chat_id, canal, "OCR no disponible. Busca manualmente.")
     except Exception:
-        return make_response(chat_id, canal, "Error al procesar la cedula. Intenta buscar manualmente.")
+        return make_response(chat_id, canal, "Error al procesar la cedula. Intenta manualmente.")
+
+
+def _handle_reg_cedula_ocr(
+    msg: dict[str, Any], chat_id: str, store: ConversationStateStore | None,
+) -> dict[str, Any]:
+    """Paso opcional en registro: escanear cedula con OCR."""
+    canal = msg["canal"]
+    state = get_conversation_state(chat_id, store)
+    text = msg.get("text", "").strip().lower()
+    if text in ("no", "omitir", "n", "no tengo", "ns"):
+        state["paso"] = "reg_edad"
+        set_conversation_state(chat_id, state, store)
+        return make_response(chat_id, canal, f"Ok. ¿Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")
+    if msg.get("_image_bytes"):
+        try:
+            from app.services.ocr_service import extract_from_id_image
+            ocr_data = extract_from_id_image(msg["_image_bytes"])
+            if ocr_data.get("nombre"):
+                state["nombre"] = ocr_data["nombre"]
+            if ocr_data.get("cedula"):
+                state["cedula"] = ocr_data["cedula"]
+            resumen = f"*Datos detectados:*\nNombre: {state['nombre']}"
+            if state.get("cedula"):
+                resumen += f"\nCedula: {state['cedula']}"
+            if ocr_data.get("fecha_nacimiento"):
+                resumen += f"\nFecha nacimiento: {ocr_data['fecha_nacimiento']}"
+            resumen += "\n\n*¿Es correcto?*"
+            state["paso"] = "reg_ocr_confirmar"
+            set_conversation_state(chat_id, state, store)
+            return make_response(chat_id, canal, resumen, buttons=[("si", "Si"), ("no", "No")])
+        except ImportError:
+            pass
+        except Exception:
+            pass
+    state["paso"] = "reg_edad"
+    set_conversation_state(chat_id, state, store)
+    return make_response(chat_id, canal, f"¿Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")
+
+
+def _handle_reg_ocr_confirmar(
+    msg: dict[str, Any], chat_id: str, text: str, store: ConversationStateStore | None,
+) -> dict[str, Any]:
+    """Confirma o rechaza datos del OCR."""
+    canal = msg["canal"]
+    state = get_conversation_state(chat_id, store)
+    if text in ("si", "yes", "ok"):
+        state["paso"] = "reg_ubicacion"
+        set_conversation_state(chat_id, state, store)
+        return make_response(chat_id, canal, f"¿Donde fue vista por ultima vez *{state['nombre']}*?")
+    state["paso"] = "reg_edad"
+    set_conversation_state(chat_id, state, store)
+    return make_response(chat_id, canal, f"Ok. ¿Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")

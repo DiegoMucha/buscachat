@@ -1,7 +1,7 @@
-from app.adapters.green_api import NullNotifier
 from app.adapters.venezuela_te_busca import VenezuelaTeBuscaPerson, VenezuelaTeBuscaSearchResult
 from app.config import Settings
 from app.face.stub import StubFaceMatcher
+from app.messaging.notifier import NullNotifier
 from app.messaging.pipeline import run_message_pipeline
 from app.messaging.session_store import InMemoryConversationStateStore
 from app.messaging.types import GenericInboundMessage, MessageSource
@@ -49,7 +49,7 @@ def test_text_search_returns_up_to_ten_informative_results(monkeypatch) -> None:
         session=object(),
         matcher=StubFaceMatcher(),
         notifier=NullNotifier(),
-        settings=Settings(face_matcher="stub", notifier="null"),
+        settings=Settings(face_matcher="stub"),
         conversation_store=store,
     )
 
@@ -72,4 +72,40 @@ def test_text_search_returns_up_to_ten_informative_results(monkeypatch) -> None:
     assert [(button.id, button.title) for button in outbound.buttons] == [
         ("buscar", "Volver a buscar"),
         ("menu", "Menu principal"),
+    ]
+
+
+def test_menu_text_returns_menu_without_external_search(monkeypatch) -> None:
+    def fail_search_venezuela_te_busca(*args, **kwargs):
+        raise AssertionError("menu should not be treated as a search query")
+
+    monkeypatch.setattr(
+        "app.messaging.pipeline.search_venezuela_te_busca",
+        fail_search_venezuela_te_busca,
+    )
+
+    store = InMemoryConversationStateStore()
+    store.set_state("chat-1", {"paso": "menu"})
+    message = GenericInboundMessage(
+        source=MessageSource.META,
+        sender_id="user-1",
+        chat_id="chat-1",
+        text="menu",
+    )
+
+    outbound = run_message_pipeline(
+        message,
+        session=object(),
+        matcher=StubFaceMatcher(),
+        notifier=NullNotifier(),
+        settings=Settings(face_matcher="stub"),
+        conversation_store=store,
+    )
+
+    assert outbound.action is None
+    assert "BuscaChat" in outbound.text
+    assert [(button.id, button.title) for button in outbound.buttons] == [
+        ("1", "Buscar"),
+        ("2", "Registrar"),
+        ("3", "Ayuda"),
     ]

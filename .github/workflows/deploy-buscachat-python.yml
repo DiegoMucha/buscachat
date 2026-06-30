@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - ".github/workflows/deploy-buscachat-python.yml"
       - "buscachat-python/**"
 
 concurrency:
