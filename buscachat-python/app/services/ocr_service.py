@@ -69,71 +69,231 @@ def extract_from_id_image(image_bytes: bytes) -> dict[str, Any]:
     }
 
 
-def _find_name(lines: list[str], full_text: str) -> str | None:
-    """Busca nombre completo: APELLIDOS + NOMBRES (formato cedula venezolana).
+# Palabras que aparecen en cedulas venezolanas pero no son parte del nombre.
+_NAME_NOISE_WORDS = frozenset({
+    "edo", "civil", "soltero", "soltera", "casado", "casada",
+    "divorciado", "divorciada", "viudo", "viuda",
+    "director", "directora", "directorjefe", "jefe",
+    "dr", "dra", "doctor", "doctora", "lic", "licenciado", "licenciada",
+    "republica", "bolivariana", "venezuela", "venezolano", "venezolana",
+    "cedula", "identidad", "nacionalidad", "estado",
+    "fecha", "nacimiento", "sexo", "firma", "huella",
+    "nombres", "apellidos", "nombre", "apellido",
+})
 
-    Tambien prueba buscar por posicion: en cedulas venezolanas,
-    APELLIDOS suele estar en las primeras lineas despues de los datos de la republica.
+# Nombres/apellidos comunes en Venezuela para separar palabras concatenadas por OCR.
+_COMMON_NAMES = frozenset({
+    "JUAN", "JOSE", "MARIA", "ANGELA", "ALVARO", "JUNIOR", "ENRIQUE",
+    "CARLOS", "LUIS", "PEDRO", "ANA", "CARMEN", "ROSA", "MIGUEL",
+    "ANTONIO", "JESUS", "DANIEL", "DAVID", "ANDRES", "FERNANDO",
+    "GONZALEZ", "GARCIA", "RODRIGUEZ", "LOPEZ", "MARTINEZ", "PEREZ",
+    "SANABRIA", "ROJAS", "DIAZ", "TARAZONA", "LEIVA", "FLORES",
+    "RAMIREZ", "TORRES", "RIVERA", "GOMEZ", "SANCHEZ", "HERNANDEZ",
+    "RAMOS", "MORALES", "CRUZ", "REYES", "DURAN", "MENDOZA", "CASTRO",
+})
+
+
+_NAME_LABEL_RE = re.compile(
+    r"(apellidos?|nombres?|apell|pell|apel|ellido|pellid|nomb|ombre|mbre|nomeres?)",
+    re.IGNORECASE,
+)
+_APELLIDO_LABEL_RE = re.compile(r"(apellidos?|apell|pell|apel|ellido|pellid)", re.IGNORECASE)
+_NOMBRE_LABEL_RE = re.compile(r"(nombres?|nomb|ombre|mbre|nomeres?)", re.IGNORECASE)
+_CEDULA_LIKE_RE = re.compile(r"^[VE]\s*[-.]?\s*\d|\d{1,2}[.]\d{3}[.]\d{3}")
+
+
+def _is_valid_name_line(candidate: str) -> bool:
+    """Una linea es candidata a nombre si tiene palabras validas y no es cedula/ruido."""
+    words = candidate.split()
+    if not words:
+        return False
+    if _CEDULA_LIKE_RE.search(candidate):
+        return False
+    # Rechazar si TODAS las palabras son ruido (ej: "EDO CIVIL").
+    return not all(w.lower() in _NAME_NOISE_WORDS for w in words)
+
+
+def _strip_label_residual(value: str, matched_label_len: int) -> str:
+    """Quita residuos cortos del label.
+
+    Si OCR leyo el label completo (ej: 'APELLIDOS') no tocamos el valor,
+    salvo una 's' suelta residual del plural (ej: OMBRES -> OMBRE + S).
+    Si fue parcial (ej: 'PELL' en 'PELLDOsLEIVA') quitamos el fragmento.
     """
+    value = value.strip()
+    if matched_label_len < 5:
+        value = re.sub(r"^\s*[A-Za-z]{1,3}[sS]?\s*", "", value).strip()
+    # Quitar 's' suelta residual (no remove 'S' de un nombre como Sandra).
+    value = re.sub(r"^\s*[sS]\b\s*", "", value).strip()
+    return value
+
+
+def _split_concatenated_word(word: str) -> str:
+    """Intenta separar palabras fusionadas por OCR usando un diccionario reducido.
+
+    Ejemplo: 'SANABRIAROJAS' -> 'SANABRIA ROJAS', 'JUNIORENRIQUE' -> 'JUNIOR ENRIQUE'.
+    """
+    if len(word) <= 10 or not word.isalpha():
+        return word
+    w = word.upper()
+    # Preferir prefijo conocido.
+    for name in sorted(_COMMON_NAMES, key=len, reverse=True):
+        if w.startswith(name) and len(w) > len(name) + 2:
+            rest = w[len(name):]
+            if rest in _COMMON_NAMES or len(rest) >= 3:
+                return f"{name} {rest}"
+    # Si no hay prefijo, probar sufijo conocido.
+    for name in sorted(_COMMON_NAMES, key=len, reverse=True):
+        if w.endswith(name) and len(w) > len(name) + 2:
+            prefix = w[:-len(name)]
+            if prefix in _COMMON_NAMES or len(prefix) >= 3:
+                return f"{prefix} {name}"
+    return word
+
+
+def _extract_after_label(line: str, match: re.Match) -> str:
+    """Extrae el valor despues de un label garbado.
+
+    Cuando label y valor estan separados por espacio solo recorta espacios.
+    Cuando estan pegados intenta quitar el residuo corto del label.
+    """
+    after = line[match.end():]
+    if after and not after[0].isspace():
+        after = _strip_label_residual(after, len(match.group(0)))
+    return after.strip()
+
+
+def _clean_name(s: str) -> str:
+    """Limpia puntuacion, numeros sueltos, palabras ruido y separa palabras fusionadas."""
+    if not s:
+        return ""
+    s = re.sub(r"[-_.:,;]+", " ", s)
+    words = []
+    for w in s.split():
+        if re.match(r"^\d+$", w):
+            continue
+        if w.lower() in _NAME_NOISE_WORDS:
+            continue
+        words.extend(_split_concatenated_word(w).split())
+    return " ".join(words)
+
+
+def _split_concatenated_name_line(line: str) -> tuple[str, str] | None:
+    """Separa APELLIDOS y NOMBRES cuando OCR los fusiona en una linea.
+
+    Ejemplo: 'PELLDOsLEIVA GONZALEZ OMBRES ANGELA MARIA'
+      -> apellidos='LEIVA GONZALEZ', nombres='ANGELA MARIA'
+    """
+    ll = line.lower()
+    apell_match = _APELLIDO_LABEL_RE.search(ll)
+    nomb_match = _NOMBRE_LABEL_RE.search(ll)
+
+    if not apell_match or not nomb_match:
+        return None
+
+    apell_label_len = apell_match.end() - apell_match.start()
+    nomb_label_len = nomb_match.end() - nomb_match.start()
+
+    if apell_match.start() < nomb_match.start():
+        apell_value = line[apell_match.end():nomb_match.start()]
+        nomb_value = line[nomb_match.end():]
+    else:
+        nomb_value = line[nomb_match.end():apell_match.start()]
+        apell_value = line[apell_match.end():]
+
+    apellidos = _strip_label_residual(apell_value, apell_label_len)
+    nombres = _strip_label_residual(nomb_value, nomb_label_len)
+    return apellidos, nombres
+
+
+def _find_name(lines: list[str], full_text: str) -> str | None:
+    """Busca nombre completo en cedula venezolana.
+
+    Soporta:
+      - Labels y valores en lineas separadas (formato estandar).
+      - Label y valor en la misma linea (ej: 'APELUDOs PINA MENDEZ').
+      - Labels concatenados en una sola linea por OCR.
+    """
+    log.info("OCR lines: %s", lines)
     nombres = ""
     apellidos = ""
 
-    log.info("OCR lines: %s", lines)
-
     for i, line in enumerate(lines):
-        # Detectar NOMBRES (flexible)
-        if re.search(r"NOM(BRE|S)?S?", line, re.IGNORECASE):
-            cleaned = re.sub(r"(?i)NOM(BRE|S)?S?:?\s*", "", line).strip()
-            if cleaned and len(cleaned) > 2:
-                nombres = cleaned
-            elif i + 1 < len(lines):
-                nombres = lines[i + 1].strip()
+        original_line = line
+        ll = line.lower()
 
-        # Detectar APELLIDOS (flexible: APEL, APELL, APELUDOs, etc.)
-        for j, candidate in enumerate(lines):
-            if re.search(r"APE(L{1,}|LL|LUDO)", candidate, re.IGNORECASE):
-                # Limpiar todo desde APE hasta donde empiezan los apellidos reales
-                cleaned = re.sub(r"(?i)APE(L{1,}|LL|LUDO)S?:?\s*", "", candidate).strip()
-                if cleaned and len(cleaned) > 2:
-                    apellidos = cleaned
-                elif j + 1 < len(lines):
-                    apellidos = lines[j + 1].strip()
-                break
+        # Caso concatenado: APELLIDOS + NOMBRES en una sola linea.
+        if _APELLIDO_LABEL_RE.search(ll) and _NOMBRE_LABEL_RE.search(ll):
+            split = _split_concatenated_name_line(original_line)
+            if split:
+                apellidos, nombres = split
+                continue
+
+        # Label de NOMBRES -> primero inline, luego siguiente linea valida.
+        nomb_match = _NOMBRE_LABEL_RE.search(ll)
+        if nomb_match:
+            cleaned = _extract_after_label(original_line, nomb_match).strip()
+            if cleaned:
+                nombres = cleaned
+            else:
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    candidate = lines[j].strip()
+                    if _is_valid_name_line(candidate):
+                        nombres = candidate
+                        break
+            continue
+
+        # Label de APELLIDOS -> primero inline, luego siguiente linea valida.
+        apell_match = _APELLIDO_LABEL_RE.search(ll)
+        if apell_match:
+            cleaned = _extract_after_label(original_line, apell_match).strip()
+            if cleaned:
+                apellidos = cleaned
+            else:
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    candidate = lines[j].strip()
+                    if _is_valid_name_line(candidate):
+                        apellidos = candidate
+                        break
+            continue
+
+    nombres = _clean_name(nombres)
+    apellidos = _clean_name(apellidos)
+
+    # Evitar duplicados si un valor contiene al otro (ej: tras limpieza).
+    if nombres and apellidos and nombres.lower() in apellidos.lower():
+        apellidos = re.sub(re.escape(nombres), "", apellidos, flags=re.IGNORECASE).strip()
+        apellidos = re.sub(r"\s+", " ", apellidos).strip()
+    elif nombres and apellidos and apellidos.lower() in nombres.lower():
+        nombres = re.sub(re.escape(apellidos), "", nombres, flags=re.IGNORECASE).strip()
+        nombres = re.sub(r"\s+", " ", nombres).strip()
 
     log.info("OCR name: nombres=%r apellidos=%r", nombres, apellidos)
 
-    # Limpiar ruido OCR (palabras cortas en mayusculas que no son nombres)
-    def _clean(s: str) -> str:
-        words = s.split()
-        result = []
-        for w in words:
-            if len(w) < 2:
-                continue
-            # Filtrar palabras que son mayusculas con una minuscula al final (ruido OCR)
-            upper_count = sum(1 for c in w if c.isupper())
-            if len(w) == 4 and upper_count >= 3 and w[-1].islower():
-                continue
-            result.append(w)
-        return " ".join(result)
-
-    nombres = _clean(nombres)
-    apellidos = _clean(apellidos)
-
-    # Formato natural: NOMBRES APELLIDOS
-    if apellidos and nombres:
+    if nombres and apellidos:
         return f"{nombres} {apellidos}"
-    if apellidos:
-        return apellidos
     if nombres:
         return nombres
+    if apellidos:
+        return apellidos
 
-    # Ultimo fallback: agarrar las 2-3 lineas mas largas sin labels
-    candidates = [l for l in lines if len(l.split()) >= 2 and not re.search(
-        r"^\d|VENEZOLANO|REPUBLICA|BOLIVARIANA|CEDULA|NACIONALIDAD|ESTADO|FECHA|SEXO|NOMBRE|APELLIDO|FIRMA|HUELLA|V-|E-", l, re.IGNORECASE)]
-    candidates.sort(key=len, reverse=True)
+    # Fallback: las 2 lineas mas largas que parecen nombres.
+    skip = [r"^\d", r"VENEZOLANO", r"REPUBLICA", r"BOLIVARIANA", r"CEDULA",
+            r"NACIONALIDAD", r"ESTADO", r"FECHA", r"SEXO", r"FIRMA", r"HUELLA",
+            r"V-", r"E-", r"DIRECTOR", r"SOLTERO", r"CASADO", r"EDO", r"F\\.",
+            r"NOMBRE", r"APELLIDO", r"\bDr\b", r"\bDra\b",
+            r"(nomb|apell|pellid)"]
+    candidates = [
+        _clean_name(line)
+        for line in lines
+        if not any(re.search(p, line, re.IGNORECASE) for p in skip)
+    ]
+    candidates = [c for c in candidates if len(c.split()) >= 2]
     log.info("OCR fallback: %s", candidates[:3])
     if len(candidates) >= 2:
-        return f"{candidates[0]} {candidates[1]}"
+        # En cedulas venezolanas APELLIDOS aparece antes que NOMBRES;
+        # devolvemos en formato nombres apellidos.
+        return f"{candidates[1]} {candidates[0]}"
     return candidates[0] if candidates else None
 
 
@@ -155,12 +315,14 @@ def _find_cedula(lines: list[str], full_text: str) -> str | None:
             cedula = re.sub(r"[.\s]+", "", cedula)
             if not cedula.startswith(("V", "E")):
                 cedula = "V" + cedula
+            # Asegurar el guion: V12345678 -> V-12345678
+            cedula = re.sub(r"^([VE])(\d+)$", r"\1-\2", cedula)
             return cedula
 
     return None
 
 
 def _find_birth_date(lines: list[str], full_text: str) -> str | None:
-    """Busca fecha de nacimiento."""
+    """Busca fecha de nacimiento y normaliza el separador a '/'."""
     match = re.search(r"(\d{2}[/-]\d{2}[/-]\d{2,4})", full_text)
-    return match.group(1) if match else None
+    return match.group(1).replace("-", "/") if match else None
