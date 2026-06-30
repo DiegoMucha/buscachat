@@ -104,17 +104,12 @@ def test_search_flow_has_foto_sub_menu() -> None:
 
     # Menu → buscar
     client.post("/web-chat/webhook", json={"text": "1"})
-    # buscar_modo → elegir "1" (por foto)
-    resp = client.post("/web-chat/webhook", json={"text": "1"})
-
-    messages = resp.json()["messages"]
-    bot_msg = messages[-1]
-    assert (
-        "busqueda por foto" in bot_msg["text"].lower()
-        or "foto persona" in bot_msg["text"].lower()
-    )
-    assert bot_msg["buttons"][0]["title"] == "Foto persona"
-    assert bot_msg["buttons"][1]["title"] == "Foto cedula"
+    # buscar_modo → elegir "2" (por foto) → buscar_modo_foto
+    resp = client.post("/web-chat/webhook", json={"text": "2"})
+    bot_msg = resp.json()["messages"][-1]
+    assert "busqueda por foto" in bot_msg["text"].lower() or "tipo de busqueda" in bot_msg["text"].lower()
+    assert bot_msg["buttons"][0]["title"] == "Foto del rostro"
+    assert bot_msg["buttons"][1]["title"] == "Foto de cedula"
 
 
 def test_register_flow_ocr_step_accepts_text_no() -> None:

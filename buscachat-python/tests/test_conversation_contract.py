@@ -59,7 +59,7 @@ def test_non_menu_shortcuts_do_not_bypass_current_flow(text: str) -> None:
     [
         ("Buscar por cédula o nombre", "numero de cédula", "buscar_query"),
         ("Buscar por cedula o nombre", "numero de cédula", "buscar_query"),
-        ("Buscar por foto", "foto clara del rostro", "buscar_foto"),
+        ("Buscar por foto", "busqueda por foto", "buscar_modo_foto"),
     ],
 )
 def test_search_mode_accepts_visible_button_labels(text: str, expected_text: str, expected_step: str) -> None:
