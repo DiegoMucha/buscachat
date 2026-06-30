@@ -40,10 +40,10 @@ def handle_menu(msg: dict[str, Any], chat_id: str, text: str, store: Conversatio
     if text in HELP_COMMANDS:
         return make_response(chat_id, canal,
             "ℹ️ *Ayuda*\n\n"
-            "BuscaChat te ayuda a consultar informacion sobre personas localizadas, desaparecidas o reportadas.\n\n"
-            "Fuente principal: https://venezuelatebusca.com/\n\n"
+            "BuscaChat te ayuda a consultar informacion sobre personas localizadas, desaparecidas o reportadas por fuentes de informacion.\n\n"
+            "Fuente principal de informacion: https://venezuelatebusca.com/\n\n"
             "• Para buscar, escribe un nombre, una cédula o envia una foto.\n"
-            "• Para registrar, te pedire nombre, edad, ubicacion, descripcion, foto y contacto.")
+            "• Para registrar un caso, te pedire nombre, edad aproximada, ubicacion, descripcion, foto y contacto.")
     if text in GREETINGS:
         return menu_response(chat_id, canal)
     if text:
@@ -101,17 +101,19 @@ def handle_buscar_foto(msg: dict[str, Any], chat_id: str, store: ConversationSta
 def handle_buscar_nombre(msg: dict[str, Any], chat_id: str, text: str, store: ConversationStateStore | None) -> dict[str, Any]:
     set_conversation_state(chat_id, {"paso": "buscar_resultado", "tipo": "nombre", "query": text}, store)
     return {"chat_id": chat_id, "canal": msg["canal"], "source": msg.get("source"), "respuesta": None,
-            "accion": "buscar_por_nombre", "datos": {"query": text}, "sender": msg.get("sender"), "nombre": msg.get("nombre")}
+            "accion": "buscar_por_query", "datos": {"query": text}, "sender": msg.get("sender"), "nombre": msg.get("nombre")}
 
 
 def handle_buscar_cedula(msg: dict[str, Any], chat_id: str, text: str, store: ConversationStateStore | None) -> dict[str, Any]:
     set_conversation_state(chat_id, {"paso": "buscar_resultado", "tipo": "cedula", "query": text}, store)
     return {"chat_id": chat_id, "canal": msg["canal"], "source": msg.get("source"), "respuesta": None,
-            "accion": "buscar_por_cedula", "datos": {"query": text}, "sender": msg.get("sender"), "nombre": msg.get("nombre")}
+            "accion": "buscar_por_query", "datos": {"query": text}, "sender": msg.get("sender"), "nombre": msg.get("nombre")}
 
 
 def handle_buscar_resultado(msg: dict[str, Any], chat_id: str, text: str, store: ConversationStateStore | None) -> dict[str, Any]:
+    from app.messaging.conversation import MARK_FOUND_COMMANDS
     canal = msg["canal"]
+    state = get_conversation_state(chat_id, store)
     if text in ("menu", "cancelar", "salir", "inicio"):
         set_conversation_state(chat_id, None, store)
         return menu_response(chat_id, canal)
@@ -121,6 +123,10 @@ def handle_buscar_resultado(msg: dict[str, Any], chat_id: str, text: str, store:
     if text in ("registrar",):
         set_conversation_state(chat_id, {"paso": "reg_nombre"}, store)
         return make_response(chat_id, canal, "📝 *Registrar persona desaparecida*\n\nEscribe el *nombre completo* de la persona.")
+    if text in MARK_FOUND_COMMANDS and state.get("person_id"):
+        return {"chat_id": chat_id, "canal": canal, "respuesta": None, "accion": "marcar_encontrado",
+                "datos": {"person_id": state["person_id"], "person_name": state.get("person_name")},
+                "sender": msg.get("sender"), "nombre": msg.get("nombre")}
     set_conversation_state(chat_id, None, store)
     return menu_response(chat_id, canal)
 
