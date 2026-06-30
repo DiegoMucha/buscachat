@@ -15,6 +15,17 @@ GREETINGS = {
     "hello",
     "hi",
 }
+MENU_COMMAND = "menu"
+HELP_COMMANDS = {"3", "ayuda"}
+REGISTER_COMMANDS = {"2", "registrar"}
+SEARCH_QUERY_COMMANDS = {
+    "1",
+    "buscar por cedula o nombre",
+    "buscar por cédula o nombre",
+}
+SEARCH_PHOTO_COMMANDS = {"2", "buscar por foto"}
+MARK_FOUND_COMMANDS = {"marcar", "marcar encontrada"}
+CONFIRM_COMMANDS = {"si", "confirmar"}
 
 
 def _store(store: ConversationStateStore | None = None) -> ConversationStateStore:
@@ -98,14 +109,11 @@ def run_conversation_motor(
     store: ConversationStateStore | None = None,
 ) -> dict[str, Any]:
     chat_id = msg["chat_id"]
-    text = msg.get("text", "").strip().lower()
+    text = msg.get("text", "").strip().casefold()
 
-    if text in ("menu", "0", "cancelar", "salir", "inicio"):
+    if text == MENU_COMMAND:
         set_conversation_state(chat_id, {"paso": "menu"}, store)
         return menu_response(chat_id, msg["canal"])
-    if text in ("buscar", "volver a buscar"):
-        set_conversation_state(chat_id, {"paso": "buscar_modo"}, store)
-        return search_mode_response(chat_id, msg["canal"])
 
     state = get_conversation_state(chat_id, store)
     paso = state.get("paso", "menu")
@@ -151,17 +159,17 @@ def _handle_menu(
     store: ConversationStateStore | None,
 ) -> dict[str, Any]:
     canal = msg["canal"]
-    if text in ("1", "buscar", "volver a buscar"):
+    if text in ("1", "buscar"):
         set_conversation_state(chat_id, {"paso": "buscar_modo"}, store)
         return search_mode_response(chat_id, canal)
-    if text == "2":
+    if text in REGISTER_COMMANDS:
         set_conversation_state(chat_id, {"paso": "reg_nombre"}, store)
         return make_response(
             chat_id,
             canal,
             "📝 *Registrar persona desaparecida*\n\nEscribe el *nombre completo* de la persona.",
         )
-    if text == "3":
+    if text in HELP_COMMANDS:
         return make_response(
             chat_id,
             canal,
@@ -191,14 +199,14 @@ def _handle_buscar_modo(
     canal = msg["canal"]
     if msg.get("imagen_ref"):
         return _handle_buscar_foto(msg, chat_id, store)
-    if text in ("1", "cedula", "cédula", "nombre", "por cedula", "por cédula", "por nombre"):
+    if text in SEARCH_QUERY_COMMANDS:
         set_conversation_state(chat_id, {"paso": "buscar_query"}, store)
         return make_response(
             chat_id,
             canal,
             "Escribe el *numero de cédula* o *nombre* de la persona que buscas:",
         )
-    if text in ("2", "foto", "por foto", "buscar por foto"):
+    if text in SEARCH_PHOTO_COMMANDS:
         set_conversation_state(chat_id, {"paso": "buscar_foto"}, store)
         return make_response(
             chat_id,
@@ -293,13 +301,13 @@ def _handle_buscar_resultado(
     store: ConversationStateStore | None,
 ) -> dict[str, Any]:
     canal = msg["canal"]
-    if text in ("menu", "0", "cancelar", "salir", "inicio"):
+    if text == MENU_COMMAND:
         set_conversation_state(chat_id, None, store)
         return menu_response(chat_id, canal)
     if text in ("buscar", "volver a buscar", "1"):
         set_conversation_state(chat_id, {"paso": "buscar_modo"}, store)
         return search_mode_response(chat_id, canal)
-    if text in ("si", "sí", "yes", "ok", "marcar"):
+    if text in MARK_FOUND_COMMANDS:
         state = get_conversation_state(chat_id, store)
         set_conversation_state(chat_id, None, store)
         return {
@@ -420,7 +428,7 @@ def _handle_reg_foto(
 ) -> dict[str, Any]:
     canal = msg["canal"]
     state = get_conversation_state(chat_id, store)
-    text = msg.get("text", "").strip().lower()
+    text = msg.get("text", "").strip().casefold()
 
     if text in ("omitir", "no", "no tengo"):
         state["imagen_ref"] = None
@@ -493,7 +501,7 @@ def _handle_reg_confirmar(
     state = get_conversation_state(chat_id, store)
     embedding = state.get("_embedding")
     set_conversation_state(chat_id, None, store)
-    if text in ("si", "sí", "yes", "ok"):
+    if text in CONFIRM_COMMANDS:
         return {
             "chat_id": chat_id,
             "canal": canal,

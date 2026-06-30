@@ -14,7 +14,14 @@ from app.messaging.dependencies import (
 )
 from app.messaging.types import Button
 from app.routers import whatsapp_meta_webhook
-from app.routers.whatsapp_meta_webhook import _send_meta_message, _verify_meta_signature, router
+from app.routers.whatsapp_meta_webhook import (
+    META_BUTTON_ID_LIMIT,
+    META_BUTTON_TITLE_LIMIT,
+    _meta_interactive_payload,
+    _send_meta_message,
+    _verify_meta_signature,
+    router,
+)
 
 
 def _app_with_meta_settings(settings: Settings) -> FastAPI:
@@ -246,3 +253,71 @@ def test_meta_sender_splits_long_text_before_sending_buttons(monkeypatch) -> Non
         "id": "menu",
         "title": "Menu",
     }
+
+
+def test_meta_sender_shortens_button_titles_for_cloud_api(monkeypatch) -> None:
+    sent_payloads = []
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args) -> None:
+            return None
+
+        def post(self, url, headers, json):
+            sent_payloads.append(json)
+            return FakeResponse()
+
+    monkeypatch.setattr(whatsapp_meta_webhook.httpx, "Client", FakeClient)
+
+    _send_meta_message(
+        "15551234567",
+        "Elige una de las opciones:",
+        Settings(meta_access_token="token", meta_phone_number_id="phone-id"),
+        buttons=[
+            Button(id="1", title="Buscar por cédula o nombre"),
+            Button(id="2", title="Buscar por foto"),
+        ],
+    )
+
+    replies = [button["reply"] for button in sent_payloads[0]["interactive"]["action"]["buttons"]]
+    assert replies == [
+        {"id": "1", "title": "Cedula o nombre"},
+        {"id": "2", "title": "Buscar por foto"},
+    ]
+    assert all(len(reply["title"]) <= 20 for reply in replies)
+
+
+def test_meta_interactive_payload_enforces_button_contract() -> None:
+    overlong_id = "x" * (META_BUTTON_ID_LIMIT + 10)
+    payload = _meta_interactive_payload(
+        "15551234567",
+        "Elige una opcion:",
+        [
+            Button(id="1", title="Buscar por cédula o nombre"),
+            Button(id="", title=""),
+            Button(id=overlong_id, title="Menu principal"),
+            Button(id="extra", title="Extra option should not be sent"),
+        ],
+    )
+
+    buttons = payload["interactive"]["action"]["buttons"]
+    replies = [button["reply"] for button in buttons]
+
+    assert len(replies) == 3
+    assert replies[0] == {"id": "1", "title": "Cedula o nombre"}
+    assert replies[1] == {"id": "option-2", "title": "Opcion"}
+    assert replies[2]["id"] == "x" * META_BUTTON_ID_LIMIT
+    assert replies[2]["title"] == "Menu principal"
+    assert all(reply["title"] for reply in replies)
+    assert all(len(reply["title"]) <= META_BUTTON_TITLE_LIMIT for reply in replies)
+    assert all(reply["id"] for reply in replies)
+    assert all(len(reply["id"]) <= META_BUTTON_ID_LIMIT for reply in replies)

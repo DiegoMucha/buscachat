@@ -31,7 +31,13 @@ log = logging.getLogger(__name__)
 
 META_TEXT_BODY_LIMIT = 4096
 META_INTERACTIVE_BODY_LIMIT = 1024
+META_BUTTON_ID_LIMIT = 256
+META_BUTTON_TITLE_LIMIT = 20
 META_BUTTON_PROMPT = "Elige una opcion:"
+META_BUTTON_TITLE_OVERRIDES = {
+    "buscar por cédula o nombre": "Cedula o nombre",
+    "buscar por cedula o nombre": "Cedula o nombre",
+}
 
 router = APIRouter(
     prefix="/whatsapp-meta-webhook",
@@ -230,11 +236,35 @@ def _meta_interactive_payload(chat_id: str, text: str, buttons: list[Button]) ->
             "body": {"text": text},
             "action": {
                 "buttons": [
-                    {"type": "reply", "reply": {"id": button.id, "title": button.title}} for button in buttons[:3]
+                    {
+                        "type": "reply",
+                        "reply": {
+                            "id": _meta_button_id(button.id, index),
+                            "title": _meta_button_title(button.title),
+                        },
+                    }
+                    for index, button in enumerate(buttons[:3], start=1)
                 ]
             },
         },
     }
+
+
+def _meta_button_id(button_id: str, fallback_index: int) -> str:
+    clean_id = " ".join(button_id.split())
+    if not clean_id:
+        clean_id = f"option-{fallback_index}"
+    return clean_id[:META_BUTTON_ID_LIMIT]
+
+
+def _meta_button_title(title: str) -> str:
+    clean_title = " ".join(title.split())
+    override = META_BUTTON_TITLE_OVERRIDES.get(clean_title.casefold())
+    if override:
+        return override
+    if len(clean_title) <= META_BUTTON_TITLE_LIMIT:
+        return clean_title or "Opcion"
+    return clean_title[:META_BUTTON_TITLE_LIMIT].rstrip() or "Opcion"
 
 
 def _split_meta_text(text: str, limit: int = META_TEXT_BODY_LIMIT) -> list[str]:
