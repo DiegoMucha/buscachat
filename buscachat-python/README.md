@@ -159,3 +159,36 @@ La migracion `003_face_embedding_vector` convierte la columna JSONB heredada a
 `vector(512)` y crea el indice HNSW con distancia coseno. Si la tabla tiene
 datos previos con otra dimension, la migracion fallara; en ese caso usa
 `DROP + ADD COLUMN` y re-genera los embeddings.
+
+## OCR de cedulas (PaddleOCR)
+
+El bot puede extraer automaticamente nombre y cedula de una foto de cedula
+venezolana usando PaddleOCR. Esto se usa en dos flujos:
+
+- **Busqueda**: `Buscar → Por foto → Foto de cedula` — escanea la cedula y busca.
+- **Registro**: `Registrar → nombre → enviar foto de cedula` — rellena los datos.
+
+### Instalacion
+
+```bash
+uv sync --group ocr
+```
+
+Esto instala PaddleOCR, que descarga ~500 MB de modelos en el primer uso
+(se cachean en `~/.paddleocr`). No requiere GPU — funciona en CPU.
+
+### Configuracion
+
+No requiere variables de entorno adicionales. Si PaddleOCR no esta instalado,
+el bot sigue funcionando normalmente sin OCR (los flujos manuales no se ven
+afectados).
+
+### Uso
+
+```
+Buscar → Por foto → Foto de cedula → envias la foto → OCR extrae → busca en DB + API externa
+Registrar → Nombre → envias la foto de cedula → OCR confirma campo por campo
+```
+
+Si el OCR no puede leer la cedula, el bot te pide que intentes de nuevo
+o continues manualmente.
