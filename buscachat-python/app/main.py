@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -10,6 +11,8 @@ from app.database import get_session, run_migrations
 from app.models import utc_now
 from app.routers import web_chat as web_chat_router
 from app.routers import whatsapp_meta_webhook as meta_webhook_router
+
+logging.getLogger("app").setLevel(logging.INFO)
 
 
 @asynccontextmanager
