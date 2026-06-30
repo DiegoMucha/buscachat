@@ -9,7 +9,12 @@ from sqlmodel import Session
 from app.adapters.venezuela_te_busca import VenezuelaTeBuscaSearchResult, search_venezuela_te_busca
 from app.config import Settings
 from app.face import FaceMatcher
-from app.messaging.conversation import run_conversation_motor, set_conversation_state
+from app.messaging.conversation import (
+    MAIN_MENU_BUTTON_TITLE,
+    SEARCH_PERSON_TITLE,
+    run_conversation_motor,
+    set_conversation_state,
+)
 from app.messaging.notifier import Notifier
 from app.messaging.session_store import ConversationStateStore
 from app.messaging.types import Button, GenericInboundMessage, GenericOutboundMessage
@@ -68,7 +73,7 @@ def run_message_pipeline(
                 "nombre, cédula y foto cuando haya imagen."
             ),
             action=action,
-            buttons=[Button(id="menu", title="Menu principal")],
+            buttons=[Button(id="menu", title=MAIN_MENU_BUTTON_TITLE)],
         )
 
     if action == "buscar_por_foto":
@@ -180,7 +185,7 @@ def run_message_pipeline(
             chat_id=chat_id,
             text=text,
             action=action,
-            buttons=[Button(id="menu", title="Menu principal")],
+            buttons=[Button(id="menu", title=MAIN_MENU_BUTTON_TITLE)],
         )
 
     return GenericOutboundMessage(source=message.source, chat_id=chat_id, text="Listo.", action=action)
@@ -278,8 +283,8 @@ def _format_name_search_result(index: int, person: Any) -> str:
 
 def _search_navigation_buttons() -> list[Button]:
     return [
-        Button(id="buscar", title="Volver a buscar"),
-        Button(id="menu", title="Menu principal"),
+        Button(id="buscar", title=SEARCH_PERSON_TITLE),
+        Button(id="menu", title=MAIN_MENU_BUTTON_TITLE),
     ]
 
 

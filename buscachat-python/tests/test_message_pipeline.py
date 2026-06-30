@@ -70,7 +70,7 @@ def test_text_search_returns_up_to_ten_informative_results(monkeypatch) -> None:
     assert "Example Person 10" in outbound.text
     assert "Example Person 11" not in outbound.text
     assert [(button.id, button.title) for button in outbound.buttons] == [
-        ("buscar", "Volver a buscar"),
+        ("buscar", "Buscar persona"),
         ("menu", "Menu principal"),
     ]
 
@@ -105,7 +105,7 @@ def test_menu_text_returns_menu_without_external_search(monkeypatch) -> None:
     assert outbound.action is None
     assert "BuscaChat" in outbound.text
     assert [(button.id, button.title) for button in outbound.buttons] == [
-        ("1", "Buscar"),
-        ("2", "Registrar"),
+        ("1", "Buscar persona"),
+        ("2", "Registrar persona"),
         ("3", "Ayuda"),
     ]

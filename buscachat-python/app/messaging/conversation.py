@@ -17,7 +17,14 @@ GREETINGS = {
 }
 MENU_COMMAND = "menu"
 HELP_COMMANDS = {"3", "ayuda"}
-REGISTER_COMMANDS = {"2", "registrar"}
+PRIMARY_SOURCE_URL = "https://venezuelatebusca.com/"
+SEARCH_PERSON_TITLE = "Buscar persona"
+REGISTER_PERSON_TITLE = "Registrar persona"
+HELP_TITLE = "Ayuda"
+MAIN_MENU_BUTTON_TITLE = "Menu principal"
+MAIN_MENU_BUTTON = ("menu", MAIN_MENU_BUTTON_TITLE)
+REGISTER_COMMANDS = {"2", "registrar", "registrar persona"}
+SEARCH_PERSON_COMMANDS = {"1", "buscar", "buscar persona"}
 SEARCH_QUERY_COMMANDS = {
     "1",
     "buscar por cedula o nombre",
@@ -83,7 +90,7 @@ def menu_response(chat_id: str, canal: str) -> dict[str, Any]:
             "desaparecidas o fuentes de informacion disponibles.\n\n"
             "Elige una de las opciones:"
         ),
-        buttons=[("1", "Buscar"), ("2", "Registrar"), ("3", "Ayuda")],
+        buttons=[("1", SEARCH_PERSON_TITLE), ("2", REGISTER_PERSON_TITLE), ("3", HELP_TITLE)],
     )
 
 
@@ -159,15 +166,19 @@ def _handle_menu(
     store: ConversationStateStore | None,
 ) -> dict[str, Any]:
     canal = msg["canal"]
-    if text in ("1", "buscar"):
+    if text in SEARCH_PERSON_COMMANDS:
         set_conversation_state(chat_id, {"paso": "buscar_modo"}, store)
         return search_mode_response(chat_id, canal)
     if text in REGISTER_COMMANDS:
-        set_conversation_state(chat_id, {"paso": "reg_nombre"}, store)
+        set_conversation_state(chat_id, {"paso": "menu"}, store)
         return make_response(
             chat_id,
             canal,
-            "📝 *Registrar persona desaparecida*\n\nEscribe el *nombre completo* de la persona.",
+            (
+                "📝 *Registrar persona*\n\n"
+                "Si quieres reportar a alguien, puedes hacerlo acá:\n"
+                f"{PRIMARY_SOURCE_URL}"
+            ),
         )
     if text in HELP_COMMANDS:
         return make_response(
@@ -179,9 +190,9 @@ def _handle_menu(
                 "desaparecidas o reportadas por fuentes de informacion.\n\n"
                 "Fuente principal de informacion: https://venezuelatebusca.com/\n\n"
                 "• Para buscar, escribe un nombre, una cédula o envia una foto.\n"
-                "• Para registrar un caso, te pedire nombre, edad aproximada, ubicacion, "
-                "descripcion, foto y contacto.\n"
+                f"• Para reportar a alguien, usa {PRIMARY_SOURCE_URL}\n"
             ),
+            buttons=[MAIN_MENU_BUTTON],
         )
     if text in GREETINGS:
         return menu_response(chat_id, canal)
@@ -304,7 +315,7 @@ def _handle_buscar_resultado(
     if text == MENU_COMMAND:
         set_conversation_state(chat_id, None, store)
         return menu_response(chat_id, canal)
-    if text in ("buscar", "volver a buscar", "1"):
+    if text in ("buscar", "buscar persona", "volver a buscar", "1"):
         set_conversation_state(chat_id, {"paso": "buscar_modo"}, store)
         return search_mode_response(chat_id, canal)
     if text in MARK_FOUND_COMMANDS:
@@ -525,5 +536,5 @@ def _handle_reg_confirmar(
         chat_id,
         canal,
         "Registro cancelado.",
-        buttons=[("menu", "Menu principal")],
+        buttons=[MAIN_MENU_BUTTON],
     )
