@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Column,
@@ -12,7 +13,6 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
 
@@ -163,9 +163,7 @@ class BotReport(SQLModel, table=True):
 
 class WebhookEventLog(SQLModel, table=True):
     __tablename__ = "webhook_event_logs"
-    __table_args__ = (
-        Index("ix_webhook_event_logs_created_at", "created_at"),
-    )
+    __table_args__ = (Index("ix_webhook_event_logs_created_at", "created_at"),)
 
     id: int | None = Field(
         default=None,
@@ -184,6 +182,35 @@ class WebhookEventLog(SQLModel, table=True):
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    )
+
+
+class MetaWebhookMessage(SQLModel, table=True):
+    __tablename__ = "meta_webhook_messages"
+    __table_args__ = (
+        Index("ix_meta_webhook_messages_chat_hash", "chat_hash"),
+        Index("ix_meta_webhook_messages_status", "status"),
+        Index("ix_meta_webhook_messages_received_at", "received_at"),
+    )
+
+    message_id: str = Field(sa_column=Column(String(255), primary_key=True))
+    chat_hash: str = Field(max_length=64)
+    status: str = Field(
+        default="queued",
+        sa_column=Column(String(50), nullable=False, server_default=text("'queued'")),
+    )
+    error: str | None = Field(default=None, max_length=2000)
+    received_at: datetime = Field(
+        default_factory=utc_now,
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
+    )
+    started_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
+    )
+    processed_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True),
     )
 
 

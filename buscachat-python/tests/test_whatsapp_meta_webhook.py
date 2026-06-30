@@ -33,6 +33,30 @@ def _meta_signature(raw_body: bytes, secret: str) -> str:
     return f"sha256={digest}"
 
 
+def _meta_text_payload(message_id: str = "wamid.example") -> dict:
+    return {
+        "entry": [
+            {
+                "changes": [
+                    {
+                        "value": {
+                            "contacts": [{"profile": {"name": "Example Sender"}, "wa_id": "15551234567"}],
+                            "messages": [
+                                {
+                                    "from": "15551234567",
+                                    "id": message_id,
+                                    "type": "text",
+                                    "text": {"body": "hola"},
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+
+
 def test_meta_webhook_verification_echoes_challenge() -> None:
     app = _app_with_meta_settings(Settings(meta_verify_token="verify-me"))
 
@@ -108,6 +132,67 @@ def test_meta_webhook_post_accepts_valid_signed_status_payload() -> None:
     app = _app_with_meta_settings(Settings(meta_verify_token="verify-me", meta_app_secret="app-secret"))
     client = TestClient(app)
     raw_body = json.dumps({"entry": [{"changes": [{"value": {"statuses": []}}]}]}).encode("utf-8")
+
+    response = client.post(
+        "/whatsapp-meta-webhook",
+        content=raw_body,
+        headers={
+            "content-type": "application/json",
+            "x-hub-signature-256": _meta_signature(raw_body, "app-secret"),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.text == "ok"
+
+
+def test_meta_webhook_post_acknowledges_and_schedules_message(monkeypatch) -> None:
+    scheduled = []
+
+    def fake_enqueue(session, message_id, chat_hash):
+        assert message_id == "wamid.example"
+        assert chat_hash
+        return True
+
+    def fake_process(body, settings, matcher, notifier, conversation_store):
+        scheduled.append(body)
+
+    monkeypatch.setattr(whatsapp_meta_webhook, "_enqueue_meta_message", fake_enqueue)
+    monkeypatch.setattr(whatsapp_meta_webhook, "_process_meta_message_background", fake_process)
+
+    app = _app_with_meta_settings(Settings(meta_app_secret="app-secret"))
+    client = TestClient(app)
+    raw_body = json.dumps(_meta_text_payload()).encode("utf-8")
+
+    response = client.post(
+        "/whatsapp-meta-webhook",
+        content=raw_body,
+        headers={
+            "content-type": "application/json",
+            "x-hub-signature-256": _meta_signature(raw_body, "app-secret"),
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.text == "ok"
+    assert scheduled == [json.loads(raw_body)]
+
+
+def test_meta_webhook_post_acknowledges_duplicate_without_scheduling(monkeypatch) -> None:
+    def fake_enqueue(session, message_id, chat_hash):
+        assert message_id == "wamid.duplicate"
+        assert chat_hash
+        return False
+
+    def fake_process(body, settings, matcher, notifier, conversation_store):
+        raise AssertionError("duplicate messages should not be scheduled")
+
+    monkeypatch.setattr(whatsapp_meta_webhook, "_enqueue_meta_message", fake_enqueue)
+    monkeypatch.setattr(whatsapp_meta_webhook, "_process_meta_message_background", fake_process)
+
+    app = _app_with_meta_settings(Settings(meta_app_secret="app-secret"))
+    client = TestClient(app)
+    raw_body = json.dumps(_meta_text_payload("wamid.duplicate")).encode("utf-8")
 
     response = client.post(
         "/whatsapp-meta-webhook",
