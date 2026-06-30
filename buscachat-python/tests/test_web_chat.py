@@ -3,7 +3,6 @@ from collections.abc import Iterator
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.adapters.green_api import NullNotifier
 from app.config import Settings, get_settings
 from app.database import get_session
 from app.face.stub import StubFaceMatcher
@@ -13,6 +12,7 @@ from app.messaging.dependencies import (
     get_face_matcher_dependency,
     get_notifier_dependency,
 )
+from app.messaging.notifier import NullNotifier
 from app.messaging.web_chat_store import web_chat_store
 from app.routers.web_chat import router
 
@@ -29,7 +29,6 @@ def _client() -> TestClient:
     app.dependency_overrides[get_notifier_dependency] = lambda: NullNotifier()
     app.dependency_overrides[get_settings] = lambda: Settings(
         face_matcher="stub",
-        notifier="null",
         conversation_state_store="in_memory",
     )
     return TestClient(app)

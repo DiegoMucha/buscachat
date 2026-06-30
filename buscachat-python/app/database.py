@@ -1,13 +1,12 @@
 from collections.abc import Generator
 from pathlib import Path
 
-from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine, create_engine
 from sqlmodel import Session
 
+from alembic import command
 from app.config import get_settings
-
 
 settings = get_settings()
 engine = create_engine(settings.database_url, pool_pre_ping=True)

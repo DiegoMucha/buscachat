@@ -7,10 +7,10 @@ Create Date: 2026-06-27 00:00:00
 
 from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision: str = "001_initial"
 down_revision: str | Sequence[str] | None = None

@@ -8,7 +8,6 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
-    Integer,
     String,
     UniqueConstraint,
     text,
@@ -64,43 +63,25 @@ class MissingPerson(SQLModel, table=True):
     )
 
 
-class SourceRecord(SQLModel, table=True):
-    __tablename__ = "source_records"
-    __table_args__ = (
-        UniqueConstraint("source", "external_id", name="uq_source_records_source_external"),
-        Index("ix_source_records_source_date", "source_date"),
-    )
-
-    id: int | None = Field(
-        default=None,
-        sa_column=Column(BigInteger, primary_key=True, autoincrement=True),
-    )
-    source: str = Field(max_length=100)
-    external_id: str = Field(max_length=200)
-    raw_payload: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
-    source_date: datetime | None = Field(
-        default=None,
-        sa_column=Column(DateTime(timezone=True), nullable=True),
-    )
-    synced_at: datetime = Field(
-        default_factory=utc_now,
-        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
-    )
-
-
 class BotReport(SQLModel, table=True):
     """Missing-person report collected through the conversational bot.
 
     Holds the bot-specific data that does not fit in ``MissingPerson`` (age,
     description, the reporter's contact, the conversation snapshot and the face
-    embedding) and links back to the ``missing_people`` row so registered people
-    stay searchable through the existing endpoints.
+    embedding) and links back to the ``missing_people`` row used by intake and
+    photo matching.
     """
 
     __tablename__ = "bot_reports"
     __table_args__ = (
         Index("ix_bot_reports_chat_id", "chat_id"),
         Index("ix_bot_reports_status", "status"),
+        Index(
+            "ix_bot_reports_face_embedding",
+            "face_embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"face_embedding": "vector_cosine_ops"},
+        ),
     )
 
     id: int | None = Field(
@@ -161,30 +142,6 @@ class BotReport(SQLModel, table=True):
     )
 
 
-class WebhookEventLog(SQLModel, table=True):
-    __tablename__ = "webhook_event_logs"
-    __table_args__ = (Index("ix_webhook_event_logs_created_at", "created_at"),)
-
-    id: int | None = Field(
-        default=None,
-        sa_column=Column(BigInteger, primary_key=True, autoincrement=True),
-    )
-    method: str = Field(max_length=20)
-    url: str = Field(max_length=4000)
-    path: str = Field(max_length=1000)
-    source_ip: str | None = Field(default=None, max_length=100)
-    headers: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
-    query_params: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
-    body: Any | None = Field(
-        default=None,
-        sa_column=Column(JSONB, nullable=True),
-    )
-    created_at: datetime = Field(
-        default_factory=utc_now,
-        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
-    )
-
-
 class MetaWebhookMessage(SQLModel, table=True):
     __tablename__ = "meta_webhook_messages"
     __table_args__ = (
@@ -211,31 +168,4 @@ class MetaWebhookMessage(SQLModel, table=True):
     processed_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),
-    )
-
-
-class SyncState(SQLModel, table=True):
-    __tablename__ = "sync_state"
-
-    source: str = Field(primary_key=True, max_length=100)
-    last_success_at: datetime | None = Field(
-        default=None,
-        sa_column=Column(DateTime(timezone=True), nullable=True),
-    )
-    last_source_date: datetime | None = Field(
-        default=None,
-        sa_column=Column(DateTime(timezone=True), nullable=True),
-    )
-    last_records_seen: int = Field(
-        default=0,
-        sa_column=Column(Integer, nullable=False, server_default=text("0")),
-    )
-    last_records_upserted: int = Field(
-        default=0,
-        sa_column=Column(Integer, nullable=False, server_default=text("0")),
-    )
-    last_error: str | None = Field(default=None, max_length=2000)
-    updated_at: datetime = Field(
-        default_factory=utc_now,
-        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=text("now()")),
     )

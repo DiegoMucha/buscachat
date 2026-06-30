@@ -2,16 +2,15 @@ from collections.abc import Iterator
 
 import pytest
 from sqlalchemy import create_engine
-from sqlmodel import Session, select
+from sqlmodel import Session
 from testcontainers.postgres import PostgresContainer
 
 from app.config import Settings
 from app.database import run_migrations
 from app.face import StubFaceMatcher
-from app.models import BotReport, MissingPerson
+from app.models import MissingPerson
 from app.services import bot_intake
 from app.services.search import find_missing_person_by_name
-
 
 pytestmark = pytest.mark.e2e
 
@@ -27,24 +26,20 @@ class SpyNotifier:
 @pytest.fixture(scope="session")
 def postgres_url() -> Iterator[str]:
     with PostgresContainer("pgvector/pgvector:pg18") as postgres:
-        yield postgres.get_connection_url().replace(
-            "postgresql+psycopg2://", "postgresql+psycopg://"
-        )
+        yield postgres.get_connection_url().replace("postgresql+psycopg2://", "postgresql+psycopg://")
 
 
 def test_register_and_search_by_photo(postgres_url: str, monkeypatch) -> None:
     engine = create_engine(postgres_url, pool_pre_ping=True)
     run_migrations(engine)
 
-    settings = Settings(face_matcher="stub", notifier="null")
+    settings = Settings(face_matcher="stub")
     matcher = StubFaceMatcher()
     notifier = SpyNotifier()
 
     # The stub embeds raw bytes; make download_image return URL-derived bytes so
     # the same imagen_ref yields the same embedding (similarity 1.0).
-    monkeypatch.setattr(
-        bot_intake, "download_image", lambda url, timeout=30.0: url.encode()
-    )
+    monkeypatch.setattr(bot_intake, "download_image", lambda url, timeout=30.0: url.encode())
 
     with Session(engine) as session:
         report = bot_intake.register_missing_person(

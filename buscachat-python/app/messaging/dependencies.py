@@ -3,10 +3,9 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from app.adapters.green_api import Notifier, get_notifier
 from app.config import Settings, get_settings
 from app.face import FaceMatcher, get_face_matcher
-from app.messaging.adapters.evolution_api import EvolutionApiSender, get_evolution_api_sender
+from app.messaging.notifier import Notifier, get_notifier
 from app.messaging.session_store import (
     ConversationStateStore,
     get_conversation_state_store,
@@ -25,19 +24,11 @@ def get_face_matcher_dependency(
     return _cached_face_matcher(settings.face_matcher, settings.face_insightface_model)
 
 
-def get_notifier_dependency(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> Notifier:
-    return get_notifier(settings)
+def get_notifier_dependency() -> Notifier:
+    return get_notifier()
 
 
 def get_conversation_state_store_dependency(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> ConversationStateStore:
     return get_conversation_state_store(settings)
-
-
-def get_evolution_api_sender_dependency(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> EvolutionApiSender:
-    return get_evolution_api_sender(settings)

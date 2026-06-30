@@ -11,7 +11,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session
 from starlette.requests import ClientDisconnect
 
-from app.adapters.green_api import Notifier
 from app.config import Settings, get_settings
 from app.database import engine, get_session
 from app.face import FaceMatcher
@@ -22,6 +21,7 @@ from app.messaging.dependencies import (
     get_face_matcher_dependency,
     get_notifier_dependency,
 )
+from app.messaging.notifier import Notifier
 from app.messaging.pipeline import run_message_pipeline
 from app.messaging.session_store import ConversationStateStore
 from app.messaging.types import Button, MessageKind

@@ -4,9 +4,9 @@ Wires the ``accion`` emitted by the n8n "Motor Conversacional" to real database
 work: registering a missing person (with a face embedding), searching by photo
 (facial recognition) and searching by name.
 
-Functions are pure: they receive the session, the face matcher and the notifier,
-mirroring the style of ``missing_people_sync``. The bot's ``datos`` keys stay in
-Spanish because that is the contract produced by the n8n flow.
+Functions are pure: they receive the session, the face matcher and the notifier.
+The bot's ``datos`` keys stay in Spanish because that is the contract produced
+by the conversation flow.
 """
 
 import logging
@@ -16,9 +16,9 @@ from typing import Any
 
 from sqlmodel import Session, select
 
-from app.adapters.green_api import Notifier
 from app.config import Settings
 from app.face.base import FaceMatcher, cosine_similarity
+from app.messaging.notifier import Notifier
 from app.models import BotReport, MissingPerson, utc_now
 from app.services.search import find_missing_people_by_name, find_missing_person_by_name
 from app.utils.images import download_image
@@ -58,8 +58,8 @@ def register_missing_person(
     """Register a missing person reported through the bot.
 
     Downloads the photo, computes its face embedding, inserts a ``MissingPerson``
-    row (so it stays searchable through the existing endpoints) and a linked
-    ``BotReport`` holding the bot-specific data, contact and conversation.
+    row for intake/photo matching and a linked ``BotReport`` holding the
+    bot-specific data, contact and conversation.
     """
     full_name = (datos.get("nombre") or "").strip() or "Desconocido"
     location = datos.get("ubicacion")

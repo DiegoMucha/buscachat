@@ -5,10 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class MessageSource(StrEnum):
-    EVOLUTION_API = "evolution-api"
-    GREEN_API = "green-api"
     META = "meta"
-    TELEGRAM = "telegram"
     WEB = "web"
 
 
