@@ -10,7 +10,10 @@ from app.messaging.conversation import (
     CONFIRM_COMMANDS,
     GREETINGS,
     HELP_COMMANDS,
+    MAIN_MENU_BUTTON,
+    PRIMARY_SOURCE_URL,
     REGISTER_COMMANDS,
+    SEARCH_PERSON_COMMANDS,
     SEARCH_PHOTO_COMMANDS,
     SEARCH_QUERY_COMMANDS,
     get_conversation_state,
@@ -33,25 +36,42 @@ def handle_menu(
     msg: dict[str, Any], chat_id: str, text: str, store: ConversationStateStore | None
 ) -> dict[str, Any]:
     canal = msg["canal"]
-    if text in ("1", "buscar"):
+    if text in SEARCH_PERSON_COMMANDS:
         set_conversation_state(chat_id, {"paso": "buscar_modo"}, store)
         return search_mode_response(chat_id, canal)
     if text in REGISTER_COMMANDS:
-        set_conversation_state(chat_id, {"paso": "reg_nombre"}, store)
+        # El boton visible "Registrar persona" muestra la URL.
+        # Los comandos internos "2" y "registrar" inician el flujo de registro.
+        if text in ("2", "registrar"):
+            set_conversation_state(chat_id, {"paso": "reg_nombre"}, store)
+            return make_response(
+                chat_id,
+                canal,
+                "📝 *Registrar persona desaparecida*\n\nEscribe el *nombre completo* de la persona.",
+            )
+        set_conversation_state(chat_id, {"paso": "menu"}, store)
         return make_response(
             chat_id,
             canal,
-            "📝 *Registrar persona desaparecida*\n\nEscribe el *nombre completo* de la persona.",
+            (
+                "📝 *Registrar persona*\n\n"
+                "Si quieres reportar a alguien, puedes hacerlo acá:\n"
+                f"{PRIMARY_SOURCE_URL}"
+            ),
         )
     if text in HELP_COMMANDS:
         return make_response(
             chat_id,
             canal,
-            "ℹ️ *Ayuda*\n\n"
-            "BuscaChat te ayuda a consultar informacion sobre personas localizadas, desaparecidas o reportadas por fuentes de informacion.\n\n"
-            "Fuente principal de informacion: https://venezuelatebusca.com/\n\n"
-            "• Para buscar, escribe un nombre, una cédula o envia una foto.\n"
-            "• Para registrar un caso, te pedire nombre, edad aproximada, ubicacion, descripcion, foto y contacto.",
+            (
+                "ℹ️ *Ayuda*\n\n"
+                "BuscaChat te ayuda a consultar informacion sobre personas localizadas, "
+                "desaparecidas o reportadas por fuentes de informacion.\n\n"
+                "Fuente principal de informacion: https://venezuelatebusca.com/\n\n"
+                "• Para buscar, escribe un nombre, una cédula o envia una foto.\n"
+                f"• Para reportar a alguien, usa {PRIMARY_SOURCE_URL}\n"
+            ),
+            buttons=[MAIN_MENU_BUTTON],
         )
     if text in GREETINGS:
         return menu_response(chat_id, canal)
@@ -345,7 +365,13 @@ def handle_reg_ocr_confirmar(
     state["nombre"] = state.get("_nombre_original", state["nombre"])
     state["paso"] = "reg_edad"
     set_conversation_state(chat_id, state, store)
-    return make_response(chat_id, canal, f"Ok, usamos el nombre que escribiste. ¿Que edad aproximada tiene *{state['nombre']}*? Responde *omitir* si no lo sabes.")
+    return make_response(
+        chat_id,
+        canal,
+        f"Ok, usamos el nombre que escribiste. "
+        f"¿Que edad aproximada tiene *{state['nombre']}*? "
+        f"Responde *omitir* si no lo sabes.",
+    )
 
 
 def handle_reg_edad(
@@ -436,7 +462,7 @@ def handle_reg_foto(
         return make_response(
             chat_id,
             canal,
-            f"✅ Foto recibida. ¿Como podemos contactar a quien reporta?",
+            "✅ Foto recibida. ¿Como podemos contactar a quien reporta?",
         )
     return make_response(chat_id, canal, "Por favor envia una foto o escribe *omitir*.")
 

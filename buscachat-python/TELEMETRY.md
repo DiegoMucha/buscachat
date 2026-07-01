@@ -1,7 +1,7 @@
 # Telemetry
 
-This service uses OpenTelemetry auto-instrumentation and exports traces to
-Honeycomb over OTLP HTTP/protobuf.
+This service uses OpenTelemetry auto-instrumentation and exports traces and
+Python logs to Honeycomb over OTLP HTTP/protobuf.
 
 ## Local setup
 
@@ -25,10 +25,11 @@ Set these variables:
 OTEL_SERVICE_NAME=buscachat-python
 OTEL_TRACES_EXPORTER=otlp
 OTEL_METRICS_EXPORTER=none
-OTEL_LOGS_EXPORTER=none
+OTEL_LOGS_EXPORTER=otlp
 OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 OTEL_EXPORTER_OTLP_ENDPOINT=https://api.honeycomb.io
 OTEL_EXPORTER_OTLP_HEADERS=x-honeycomb-team=<honeycomb-api-key>
+OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true
 ```
 
 `OTEL_SERVICE_NAME` is used by Honeycomb as the Service Dataset name. Use the

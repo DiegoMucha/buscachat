@@ -17,8 +17,19 @@ GREETINGS = {
 }
 MENU_COMMAND = "menu"
 HELP_COMMANDS = {"3", "ayuda"}
-REGISTER_COMMANDS = {"2", "registrar"}
-SEARCH_QUERY_COMMANDS = {"1", "buscar por cedula o nombre", "buscar por cédula o nombre"}
+PRIMARY_SOURCE_URL = "https://venezuelatebusca.com/"
+SEARCH_PERSON_TITLE = "Buscar persona"
+REGISTER_PERSON_TITLE = "Registrar persona"
+HELP_TITLE = "Ayuda"
+MAIN_MENU_BUTTON_TITLE = "Menu principal"
+MAIN_MENU_BUTTON = ("menu", MAIN_MENU_BUTTON_TITLE)
+REGISTER_COMMANDS = {"2", "registrar", "registrar persona"}
+SEARCH_PERSON_COMMANDS = {"1", "buscar", "buscar persona"}
+SEARCH_QUERY_COMMANDS = {
+    "1",
+    "buscar por cedula o nombre",
+    "buscar por cédula o nombre",
+}
 SEARCH_PHOTO_COMMANDS = {"2", "buscar por foto"}
 MARK_FOUND_COMMANDS = {"marcar", "marcar encontrada"}
 CONFIRM_COMMANDS = {"si", "confirmar"}
@@ -32,15 +43,29 @@ def get_conversation_state(chat_id: str, store: ConversationStateStore | None = 
     return _store(store).get_state(chat_id)
 
 
-def set_conversation_state(chat_id: str, data: dict[str, Any] | None, store: ConversationStateStore | None = None) -> None:
+def set_conversation_state(
+    chat_id: str,
+    data: dict[str, Any] | None,
+    store: ConversationStateStore | None = None,
+) -> None:
     _store(store).set_state(chat_id, data)
 
 
-def save_embedding_for_chat(chat_id: str, embedding: list[float] | None, store: ConversationStateStore | None = None) -> None:
+def save_embedding_for_chat(
+    chat_id: str,
+    embedding: list[float] | None,
+    store: ConversationStateStore | None = None,
+) -> None:
     _store(store).save_embedding(chat_id, embedding)
 
 
-def make_response(chat_id: str, canal: str, text: str, accion: str | None = None, buttons: list[tuple[str, str]] | None = None) -> dict[str, Any]:
+def make_response(
+    chat_id: str,
+    canal: str,
+    text: str,
+    accion: str | None = None,
+    buttons: list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
     out: dict[str, Any] = {"chat_id": chat_id, "canal": canal, "respuesta": text, "accion": accion}
     if buttons:
         out["buttons"] = buttons
@@ -49,12 +74,15 @@ def make_response(chat_id: str, canal: str, text: str, accion: str | None = None
 
 def menu_response(chat_id: str, canal: str) -> dict[str, Any]:
     return make_response(
-        chat_id, canal,
-        "🤖 *BuscaChat* - Asistente de busqueda humanitaria\n\n"
-        "Enviame un nombre o numero de cédula para buscar personas localizadas, "
-        "desaparecidas o fuentes de informacion disponibles.\n\n"
-        "Elige una de las opciones:",
-        buttons=[("1", "Buscar"), ("2", "Registrar"), ("3", "Ayuda")],
+        chat_id,
+        canal,
+        (
+            "🤖 *BuscaChat* - Asistente de busqueda humanitaria\n\n"
+            "Enviame un nombre o numero de cédula para buscar personas localizadas, "
+            "desaparecidas o fuentes de informacion disponibles.\n\n"
+            "Elige una de las opciones:"
+        ),
+        buttons=[("1", SEARCH_PERSON_TITLE), ("2", REGISTER_PERSON_TITLE), ("3", HELP_TITLE)],
     )
 
 

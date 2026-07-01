@@ -17,8 +17,8 @@ def _message(text: str, chat_id: str = "chat-1") -> dict:
 @pytest.mark.parametrize(
     ("text", "expected_text", "expected_step"),
     [
-        ("Buscar", "Busqueda de persona", "buscar_modo"),
-        ("Registrar", "Registrar persona desaparecida", "reg_nombre"),
+        ("Buscar persona", "Busqueda de persona", "buscar_modo"),
+        ("Registrar persona", "https://venezuelatebusca.com/", "menu"),
         ("Ayuda", "Fuente principal de informacion", "menu"),
     ],
 )
@@ -32,6 +32,15 @@ def test_main_menu_accepts_visible_button_labels(text: str, expected_text: str, 
     assert store.get_state("chat-1")["paso"] == expected_step
 
 
+def test_help_includes_menu_button() -> None:
+    store = InMemoryConversationStateStore()
+    store.set_state("chat-1", {"paso": "menu"})
+
+    response = run_conversation_motor(_message("Ayuda"), store=store)
+
+    assert response["buttons"] == [("menu", "Menu principal")]
+
+
 @pytest.mark.parametrize("text", ["menu", "MENU", " Menu "])
 def test_menu_is_the_only_global_shortcut(text: str) -> None:
     store = InMemoryConversationStateStore()
@@ -43,7 +52,10 @@ def test_menu_is_the_only_global_shortcut(text: str) -> None:
     assert store.get_state("chat-1")["paso"] == "menu"
 
 
-@pytest.mark.parametrize("text", ["buscar", "volver a buscar", "Menu principal", "cancelar", "salir", "inicio", "0"])
+@pytest.mark.parametrize(
+    "text",
+    ["buscar", "Buscar persona", "volver a buscar", "Menu principal", "cancelar", "salir", "inicio", "0"],
+)
 def test_non_menu_shortcuts_do_not_bypass_current_flow(text: str) -> None:
     store = InMemoryConversationStateStore()
     store.set_state("chat-1", {"paso": "reg_edad", "nombre": "Example Person"})
