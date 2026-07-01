@@ -12,8 +12,14 @@ from app.messaging.session_store import (
 )
 
 GREETINGS = {
-    "hola", "buenas", "buenos dias", "buenos días",
-    "buenas tardes", "buenas noches", "hello", "hi",
+    "hola",
+    "buenas",
+    "buenos dias",
+    "buenos días",
+    "buenas tardes",
+    "buenas noches",
+    "hello",
+    "hi",
 }
 MENU_COMMAND = "menu"
 HELP_COMMANDS = {"3", "ayuda"}
@@ -88,7 +94,8 @@ def menu_response(chat_id: str, canal: str) -> dict[str, Any]:
 
 def search_mode_response(chat_id: str, canal: str) -> dict[str, Any]:
     return make_response(
-        chat_id, canal,
+        chat_id,
+        canal,
         "🔎 *Busqueda de persona*\n\n"
         "Puedes buscar usando el *numero de cédula o nombre*, "
         "o usando una *foto del rostro*.\n\n"
