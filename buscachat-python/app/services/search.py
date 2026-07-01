@@ -1,4 +1,6 @@
-from sqlalchemy import or_
+import re
+
+from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 from app.models import MissingPerson
@@ -52,10 +54,27 @@ def find_missing_person_by_cedula(session: Session, cedula: str) -> MissingPerso
     if not cleaned:
         return None
 
-    digits = cleaned.upper().lstrip("VE-").strip()
+    digits = _cedula_digits(cleaned)
+    if not digits:
+        return None
+
+    normalized_cedula = func.replace(
+        func.replace(
+            func.replace(func.upper(MissingPerson.cedula_masked), ".", ""),
+            "-",
+            "",
+        ),
+        " ",
+        "",
+    )
     return _first(
         session,
-        select(MissingPerson).where(MissingPerson.cedula_masked.ilike(f"%{digits}%")),
+        select(MissingPerson).where(
+            or_(
+                MissingPerson.cedula_masked.ilike(f"%{cleaned}%"),
+                normalized_cedula.ilike(f"%{digits}%"),
+            )
+        ),
     )
 
 
@@ -72,5 +91,10 @@ def _ordered(statement):
 
 def _looks_like_cedula(text: str) -> bool:
     """Detecta si un texto parece un numero de cedula venezolana."""
-    cleaned = text.strip().upper().lstrip("VE-").replace(".", "").replace(" ", "")
-    return len(cleaned) >= 5 and cleaned.isdigit()
+    cleaned = _cedula_digits(text)
+    return len(cleaned) >= 5
+
+
+def _cedula_digits(text: str) -> str:
+    """Devuelve solo los digitos de una cedula con prefijos/separadores comunes."""
+    return re.sub(r"\D+", "", text.strip().upper())

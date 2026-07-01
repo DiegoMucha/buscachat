@@ -19,6 +19,12 @@ uv sync --dev
 docker compose up -d
 ```
 
+Optional dependency groups are not installed by default. Install one with:
+
+```bash
+uv sync --group <group-name>
+```
+
 ## Ejecutar la API
 
 ```bash
@@ -145,6 +151,10 @@ La prueba e2e del bot intake (`tests/test_bot_intake_e2e.py`) usa el contenedor
 `pgvector/pgvector:pg18` para verificar el flujo completo: registrar persona con
 embedding, busqueda sin match, busqueda con match y notificacion al reportante.
 
+Algunas pruebas dependen de paquetes opcionales y se excluyen por defecto.
+Instala el grupo correspondiente con `uv sync --group <group-name>` y ejecuta
+su marker con `uv run pytest -m <marker>`.
+
 ## Base de datos vectorial
 
 La busqueda facial no usa un servicio dedicado. La extension **pgvector** corre
@@ -159,36 +169,3 @@ La migracion `003_face_embedding_vector` convierte la columna JSONB heredada a
 `vector(512)` y crea el indice HNSW con distancia coseno. Si la tabla tiene
 datos previos con otra dimension, la migracion fallara; en ese caso usa
 `DROP + ADD COLUMN` y re-genera los embeddings.
-
-## OCR de cedulas (PaddleOCR)
-
-El bot puede extraer automaticamente nombre y cedula de una foto de cedula
-venezolana usando PaddleOCR. Esto se usa en dos flujos:
-
-- **Busqueda**: `Buscar → Por foto → Foto de cedula` — escanea la cedula y busca.
-- **Registro**: `Registrar → nombre → enviar foto de cedula` — rellena los datos.
-
-### Instalacion
-
-```bash
-uv sync --group ocr
-```
-
-Esto instala PaddleOCR, que descarga ~500 MB de modelos en el primer uso
-(se cachean en `~/.paddleocr`). No requiere GPU — funciona en CPU.
-
-### Configuracion
-
-No requiere variables de entorno adicionales. Si PaddleOCR no esta instalado,
-el bot sigue funcionando normalmente sin OCR (los flujos manuales no se ven
-afectados).
-
-### Uso
-
-```
-Buscar → Por foto → Foto de cedula → envias la foto → OCR extrae → busca en DB + API externa
-Registrar → Nombre → envias la foto de cedula → OCR confirma campo por campo
-```
-
-Si el OCR no puede leer la cedula, el bot te pide que intentes de nuevo
-o continues manualmente.

@@ -10,7 +10,7 @@ PORT="${PORT:-8000}"
 export FACE_MATCHER="${FACE_MATCHER:-stub}"
 export NOTIFIER="${NOTIFIER:-null}"
 
-uv sync --frozen --no-dev
+uv sync --frozen --no-dev --group ocr
 uv run alembic upgrade head
 
 exec uv run python -m fastapi run main.py --host "$HOST" --port "$PORT"

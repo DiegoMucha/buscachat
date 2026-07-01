@@ -5,44 +5,23 @@ in ``Bot_salva_vidas.md`` (§9). In n8n, add a Switch on ``{{ $json.accion }}``
 with one HTTP Request per branch pointing to the matching route below.
 """
 
-from functools import lru_cache
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from app.adapters.green_api import Notifier, get_notifier
 from app.config import Settings, get_settings
 from app.database import get_session
-from app.face import FaceMatcher, get_face_matcher
+from app.face import FaceMatcher
+from app.messaging.dependencies import get_face_matcher_dependency, get_notifier_dependency
+from app.messaging.notifier import Notifier
 from app.models import MissingPerson
 from app.services import bot_intake
 from app.services.search import find_missing_person_by_cedula
 from app.utils.images import download_image
 
 router = APIRouter(prefix="/bot", tags=["bot"])
-
-
-# ---------------------------------------------------------------------------
-# Shared dependencies
-# ---------------------------------------------------------------------------
-
-
-@lru_cache
-def _cached_face_matcher() -> FaceMatcher:
-    # Cache so the (potentially heavy) model loads once per process.
-    return get_face_matcher(get_settings())
-
-
-def get_face_matcher_dependency() -> FaceMatcher:
-    return _cached_face_matcher()
-
-
-def get_notifier_dependency(
-    settings: Annotated[Settings, Depends(get_settings)],
-) -> Notifier:
-    return get_notifier(settings)
 
 
 # ---------------------------------------------------------------------------
