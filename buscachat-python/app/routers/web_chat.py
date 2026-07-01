@@ -8,6 +8,7 @@ from sqlmodel import Session
 from app.config import Settings, get_settings
 from app.database import get_session
 from app.face import FaceMatcher
+from app.messaging import MessageKind
 from app.messaging.adapters.web import WEB_CHAT_ID, adapt_web_message
 from app.messaging.conversation import set_conversation_state
 from app.messaging.dependencies import (
@@ -80,6 +81,18 @@ def web_chat_webhook(
         )
 
     inbound = adapt_web_message(payload.model_dump())
+
+    # Si hay URL de imagen, descargarla para OCR
+    if inbound.image_ref and inbound.kind == MessageKind.IMAGE:
+        try:
+            from app.utils.images import download_image
+
+            inbound.image_bytes = download_image(
+                inbound.image_ref, timeout=settings.image_download_timeout_seconds
+            )
+        except Exception:
+            pass  # No bloquea el flujo si falla
+
     user_message = web_chat_store.add_user_message(inbound)
     outbound = run_message_pipeline(
         inbound,

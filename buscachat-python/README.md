@@ -19,6 +19,12 @@ uv sync --dev
 docker compose up -d
 ```
 
+Optional dependency groups are not installed by default. Install one with:
+
+```bash
+uv sync --group <group-name>
+```
+
 ## Ejecutar la API
 
 ```bash
@@ -144,6 +150,10 @@ uv run pytest -m e2e
 La prueba e2e del bot intake (`tests/test_bot_intake_e2e.py`) usa el contenedor
 `pgvector/pgvector:pg18` para verificar el flujo completo: registrar persona con
 embedding, busqueda sin match, busqueda con match y notificacion al reportante.
+
+Algunas pruebas dependen de paquetes opcionales y se excluyen por defecto.
+Instala el grupo correspondiente con `uv sync --group <group-name>` y ejecuta
+su marker con `uv run pytest -m <marker>`.
 
 ## Base de datos vectorial
 

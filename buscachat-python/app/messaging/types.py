@@ -28,6 +28,7 @@ class GenericInboundMessage(BaseModel):
     text: str = ""
     image_ref: str | None = None
     image_embedding: list[float] | None = None
+    image_bytes: bytes | None = None
     message_id: str | None = None
     sender_name: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
@@ -43,6 +44,7 @@ class GenericInboundMessage(BaseModel):
             "sender": self.sender_id,
             "nombre": self.sender_name or "",
             "_embedding": self.image_embedding,
+            "_image_bytes": self.image_bytes,
         }
 
 

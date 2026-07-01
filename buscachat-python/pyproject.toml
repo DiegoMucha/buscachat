@@ -38,13 +38,19 @@ face = [
     "numpy>=1.26.0",
     "opencv-python-headless>=4.9.0",
 ]
+# Optional OCR for scanning cedulas (PaddleOCR)
+ocr = [
+    "paddlepaddle>=2.6.0",
+    "paddleocr>=2.7.0",
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 markers = [
     "e2e: tests that start real infrastructure with testcontainers",
+    "ocr: tests that require optional OCR dependencies and model downloads",
 ]
-addopts = "-m 'not e2e'"
+addopts = "-m 'not e2e and not ocr'"
 
 [tool.ruff]
 target-version = "py312"

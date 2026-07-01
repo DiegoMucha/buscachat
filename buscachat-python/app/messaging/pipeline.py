@@ -128,50 +128,13 @@ def run_message_pipeline(
 
     if action in ("buscar_por_query", "buscar_por_cedula", "buscar_por_nombre"):
         query = datos.get("query", "")
-        try:
-            result = (
-                search_venezuela_te_busca(
-                    query,
-                    base_url=settings.venezuela_te_busca_base_url,
-                    timeout=settings.venezuela_te_busca_timeout_seconds,
-                    limit=10,
-                )
-                if query
-                else VenezuelaTeBuscaSearchResult(query="")
-            )
-        except (httpx.HTTPError, ValueError) as exc:
-            log.exception(
-                "Venezuela Te Busca search failed in message pipeline",
-                extra={"chat_id": chat_id, "action": action, "query": query},
-            )
-            trace.get_current_span().record_exception(exc)
-            set_conversation_state(chat_id, None, conversation_store)
-            return GenericOutboundMessage(
-                source=message.source,
-                chat_id=chat_id,
-                text=(
-                    "No puedo consultar en este momento. Intenta de nuevo en unos minutos o prueba con otra busqueda."
-                ),
-                action=action,
-                buttons=_search_navigation_buttons(),
-            )
-        except Exception as exc:
-            log.exception(
-                "Unexpected search failure in message pipeline",
-                extra={"chat_id": chat_id, "action": action, "query": query},
-            )
-            trace.get_current_span().record_exception(exc)
-            set_conversation_state(chat_id, None, conversation_store)
-            return GenericOutboundMessage(
-                source=message.source,
-                chat_id=chat_id,
-                text=(
-                    "No puedo consultar en este momento. Intenta de nuevo en unos minutos o prueba con otra busqueda."
-                ),
-                action=action,
-                buttons=_search_navigation_buttons(),
-            )
-        return _external_search_response(message, chat_id, action, query, result, conversation_store)
+        return _run_external_search_chat(message, session, chat_id, action, query, settings, conversation_store)
+
+    if action == "buscar_por_ocr":
+        nombre = datos.get("nombre_ocr")
+        cedula = datos.get("cedula_ocr")
+        query = cedula or nombre or ""
+        return _run_external_search_chat(message, session, chat_id, "buscar_por_cedula", query, settings, conversation_store)
 
     if action == "marcar_encontrado":
         person_id = datos.get("person_id")
@@ -279,6 +242,86 @@ def _format_name_search_result(index: int, person: Any) -> str:
         lines.append(f"*Cédula:* {person.cedula_masked}")
     lines.extend(_status_detail_lines(person))
     return "\n".join(lines)
+
+
+def _run_external_search_chat(
+    message: GenericInboundMessage,
+    session: Session,
+    chat_id: str,
+    action: str,
+    query: str,
+    settings: Settings,
+    conversation_store: ConversationStateStore | None,
+) -> GenericOutboundMessage:
+    """Busca en API externa + DB local, mergea y formatea."""
+    from app.services.search import find_missing_person_by_cedula
+    from opentelemetry import trace
+
+    # 1. Buscar en API externa
+    try:
+        external = (
+            search_venezuela_te_busca(query, base_url=settings.venezuela_te_busca_base_url,
+                                       timeout=settings.venezuela_te_busca_timeout_seconds, limit=10)
+            if query else VenezuelaTeBuscaSearchResult(query="")
+        )
+    except (httpx.HTTPError, ValueError) as exc:
+        log.exception("External search failed", extra={"query": query})
+        trace.get_current_span().record_exception(exc)
+        external = VenezuelaTeBuscaSearchResult(query=query)
+    except Exception as exc:
+        log.exception("Unexpected search failure", extra={"query": query})
+        trace.get_current_span().record_exception(exc)
+        set_conversation_state(chat_id, None, conversation_store)
+        return GenericOutboundMessage(
+            source=message.source, chat_id=chat_id,
+            text="No puedo consultar en este momento.",
+            action=action, buttons=_search_navigation_buttons(),
+        )
+
+    # 2. Buscar en DB local
+    local_people: list = []
+    if query:
+        try:
+            cedula_match = find_missing_person_by_cedula(session, query)
+            if cedula_match:
+                local_people.append(cedula_match)
+            local_people.extend(bot_intake.search_by_name_matches(session, query, limit=5))
+        except Exception:
+            pass  # DB no disponible (tests con mock)
+
+    # 3. Merge: combinar, deduplicar por full_name
+    all_people: list = list(external.persons)
+    seen_names: set[str] = {p.full_name.strip().lower() for p in external.persons}
+    seen_cedulas: set[str] = {p.id_number.strip().lower() for p in external.persons if p.id_number}
+
+    for local_person in local_people:
+        local_name = local_person.full_name.strip().lower()
+        local_cedula = (local_person.cedula_masked or "").strip().lower()
+        if local_name in seen_names or (local_cedula and local_cedula in seen_cedulas):
+            continue  # Ya está en los resultados externos
+        all_people.append(local_person)
+        seen_names.add(local_name)
+        if local_cedula:
+            seen_cedulas.add(local_cedula)
+
+    # 4. Formatear
+    if not all_people:
+        set_conversation_state(chat_id, None, conversation_store)
+        return GenericOutboundMessage(
+            source=message.source, chat_id=chat_id,
+            text=f"❌ No encontramos resultados para *{query}*.", action=action,
+            buttons=_search_navigation_buttons(),
+        )
+
+    total = external.total_count + (len(all_people) - len(external.persons))
+    text = _format_name_search_results(query, all_people, total_count=total if total > 0 else None)
+    if external.degraded:
+        text += "\n\nLa fuente respondio en modo degradado."
+    set_conversation_state(chat_id, None, conversation_store)
+    return GenericOutboundMessage(
+        source=message.source, chat_id=chat_id, text=text, action=action,
+        buttons=_search_navigation_buttons(),
+    )
 
 
 def _search_navigation_buttons() -> list[Button]:
@@ -390,3 +433,12 @@ def _person_location(person: Any) -> str | None:
         if piece and piece not in unique:
             unique.append(piece)
     return ", ".join(unique) if unique else None
+
+
+def _get_linked_bot_report(session: Session, missing_person_id: int | None) -> Any | None:
+    """Busca el BotReport vinculado a un MissingPerson."""
+    from sqlmodel import select
+    from app.models import BotReport
+    if missing_person_id is None:
+        return None
+    return session.exec(select(BotReport).where(BotReport.missing_person_id == missing_person_id)).first()

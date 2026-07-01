@@ -66,6 +66,9 @@ def register_missing_person(
     photo_url = _photo_ref(datos, imagen_ref)
     embedding = face_embedding
     if embedding is None:
+        # Si imagen_ref es un Meta media ID (solo digitos), no intentar descargar
+        if photo_url and not photo_url.startswith(("http://", "https://")):
+            photo_url = None
         embedding = _embed_from_url(matcher, photo_url, timeout=settings.image_download_timeout_seconds)
 
     external_id = uuid.uuid4().hex
@@ -126,6 +129,8 @@ def search_by_photo(
     """
     photo_url = _photo_ref(datos, imagen_ref)
     if query_embedding is None:
+        if photo_url and not photo_url.startswith(("http://", "https://")):
+            photo_url = None
         query_embedding = _embed_from_url(matcher, photo_url, timeout=settings.image_download_timeout_seconds)
     if query_embedding is None:
         return None

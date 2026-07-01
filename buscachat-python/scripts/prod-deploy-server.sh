@@ -44,7 +44,7 @@ if [[ -z "$UV_BIN" ]]; then
 fi
 
 cd "$APP_DIR/buscachat-python"
-retry 5 5 "$UV_BIN" sync --frozen --no-dev
+retry 5 5 "$UV_BIN" sync --frozen --no-dev --group ocr
 "$UV_BIN" run alembic upgrade head
 
 sudo /usr/bin/systemctl daemon-reload

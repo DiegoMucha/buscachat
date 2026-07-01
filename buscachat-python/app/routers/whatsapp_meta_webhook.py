@@ -384,6 +384,7 @@ def _process_meta_message_background(
                         _elapsed_ms(request_start),
                     )
                     return
+                message.image_bytes = image_bytes
                 message.image_embedding = matcher.embed(image_bytes)
                 save_embedding_for_chat(
                     message.chat_id,
